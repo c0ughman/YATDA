@@ -1740,22 +1740,34 @@ function deleteHabit(habitName) {
 
 // =============== Firebase Sync Functions ===============
 function syncSchedulerChanges() {
-    const timeBlocks = document.querySelectorAll('.time-input');
+    const timeBlocks = document.querySelectorAll('.time-block');
     timeBlocks.forEach(block => {
         const input = block.querySelector('.time-input');
-        input.addEventListener('change', () => {
-            try {
-                const hour = input.placeholder.match(/\d+/)[0];
-                const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
-                db.collection('chunksheet').doc('chunksheet').update({
-                    [key]: input.value
-                }).catch(error => {
-                    console.error('Error updating scheduler:', error);
-                });
-            } catch (error) {
-                console.error('Error in scheduler sync:', error);
-            }
-        });
+        if (input) {  // Add null check
+            input.addEventListener('change', () => {
+                try {
+                    const hour = input.placeholder.match(/\d+/)[0];
+                    const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
+                    
+                    // Get the scheduler container and day title to determine which document to update
+                    const scheduler = block.closest('.scheduler');
+                    const dayTitle = scheduler.querySelector('.day-title');
+                    const docName = dayTitle ? 
+                        dayTitle.textContent.toLowerCase() === 'today' ? 
+                            'chunksheet' : 
+                            dayTitle.textContent.toLowerCase() : 
+                        'chunksheet';
+
+                    db.collection('chunksheet').doc(docName).update({
+                        [key]: input.value
+                    }).catch(error => {
+                        console.error('Error updating scheduler:', error);
+                    });
+                } catch (error) {
+                    console.error('Error in scheduler sync:', error);
+                }
+            });
+        }
     });
 }
 
@@ -2031,24 +2043,3 @@ function expandSchedulers() {
     
 </body>
 </html>
-
-
-
-
- 
-
-
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
