@@ -1234,34 +1234,38 @@ function setupHabitDragAndDrop(habit) {
         e.dataTransfer.setData('text/plain', habit.querySelector('.task-name').textContent);
     });
 
-    habit.addEventListener('dragend', () => {
+    habit.addEventListener('dragend', async () => {
         habit.classList.remove('dragging');
         
-        // Update habit order in Firebase
-        const habitList = habit.closest('.task-list');
-        const habits = [...habitList.querySelectorAll('.task-item')];
-        const habitOrder = habits.map((h, index) => ({
-            name: h.querySelector('.task-name').textContent,
-            order: index
-        }));
-        
-        if (isAuthenticated) {
-            // Update all habits' order in a batch
+        if (!isAuthenticated) return;
+
+        try {
+            // Get all habits in their current order
+            const habitList = habit.closest('.task-list');
+            const habits = [...habitList.querySelectorAll('.task-item')];
+            const habitOrder = habits.map((h, index) => ({
+                name: h.querySelector('.task-name').textContent,
+                order: index
+            }));
+
+            // Get all habit documents
+            const snapshot = await db.collection('habit').get();
             const batch = db.batch();
-            
-            habitOrder.forEach(({name, order}) => {
-                db.collection('habit')
-                    .where('name', '==', name)
-                    .get()
-                    .then(querySnapshot => {
-                        querySnapshot.forEach(doc => {
-                            doc.ref.update({ order: order });
-                        });
-                    })
-                    .catch(error => {
-                        console.error('Error updating habit order:', error);
-                    });
+
+            // Update each habit's order in the batch
+            snapshot.forEach(doc => {
+                const habitData = doc.data();
+                const orderData = habitOrder.find(h => h.name === habitData.name);
+                if (orderData) {
+                    batch.update(doc.ref, { order: orderData.order });
+                }
             });
+
+            // Commit the batch
+            await batch.commit();
+            console.log('Successfully updated habit order');
+        } catch (error) {
+            console.error('Error updating habit order:', error);
         }
     });
 }
@@ -1405,40 +1409,34 @@ function initializeAddHabit() {
     });
 
     // Handle Enter key press
-    input.addEventListener('keypress', (e) => {
+    input.addEventListener('keypress', async (e) => {
         if (e.key === 'Enter' && input.value.trim()) {
             if (isAuthenticated) {
-                // Firebase version
-                db.collection('habit').add({
-                    name: input.value.trim(),
-                    monday: false,
-                    tuesday: false,
-                    wednesday: false,
-                    thursday: false,
-                    friday: false,
-                    saturday: false,
-                    sunday: false
-                }).catch(error => {
+                try {
+                    // Get the current highest order
+                    const snapshot = await db.collection('habit').get();
+                    const currentHighestOrder = snapshot.docs.reduce((max, doc) => {
+                        const order = doc.data().order || 0;
+                        return order > max ? order : max;
+                    }, -1);
+
+                    // Add new habit with order = highest + 1
+                    await db.collection('habit').add({
+                        name: input.value.trim(),
+                        monday: false,
+                        tuesday: false,
+                        wednesday: false,
+                        thursday: false,
+                        friday: false,
+                        saturday: false,
+                        sunday: false,
+                        order: currentHighestOrder + 1
+                    });
+                } catch (error) {
                     console.error('Error adding habit:', error);
-                });
-            } else {
-                // LocalStorage version
-                const habits = JSON.parse(localStorage.getItem('habits') || '[]');
-                habits.push({
-                    name: input.value.trim(),
-                    monday: false,
-                    tuesday: false,
-                    wednesday: false,
-                    thursday: false,
-                    friday: false,
-                    saturday: false,
-                    sunday: false
-                });
-                localStorage.setItem('habits', JSON.stringify(habits));
-                updateHabitList(habits.map(h => h.name));
+                }
             }
             
-            // Reset the input
             input.value = '';
             input.classList.remove('active');
             plusIcon.style.display = 'block';
@@ -1532,7 +1530,6 @@ function setupFirebaseListeners() {
             snapshot.forEach(doc => {
                 const data = doc.data();
                 if (data && data.name) {
-                    // Include all habit data, not just the name
                     habits.push({
                         name: data.name,
                         monday: data.monday || false,
@@ -1541,7 +1538,8 @@ function setupFirebaseListeners() {
                         thursday: data.thursday || false,
                         friday: data.friday || false,
                         saturday: data.saturday || false,
-                        sunday: data.sunday || false
+                        sunday: data.sunday || false,
+                        order: data.order || 0
                     });
                 }
             });
@@ -1862,8 +1860,6 @@ function initializeDragAndDrop() {
 
 
  
-
-
 
 
 
