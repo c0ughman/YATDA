@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Combined Dashboard</title>
+    <style>
+        /* Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+
+        body {
+            background-color: #1a1a1a;
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 27% 30% 40%;
+            gap: 15px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Add media query for mobile devices */
+        @media screen and (max-width: 768px) {
+            .main-container {
+                grid-template-columns: 1fr;  /* Stack elements vertically */
+                gap: 20px;  /* Increase gap between stacked elements */
+                padding: 10px;  /* Add some padding on mobile */
+            }
+
+            /* Adjust title size for mobile */
+            .subtitle {
+                font-size: 2rem;
+            }
+
+            /* Make board columns more readable on mobile */
+            .board {
+                grid-template-columns: 1fr;  /* Stack board columns vertically */
+                gap: 15px;
+            }
+
+            /* Add some spacing between board sections */
+            .column {
+                margin-bottom: 15px;
+            }
+
+            /* Ensure task list is readable on mobile */
+            .task-item {
+                flex-wrap: wrap;  /* Allow items to wrap on narrow screens */
+            }
+
+            .task-name {
+                width: 100%;  /* Full width on mobile */
+                margin-bottom: 5px;
+            }
+
+            .checkboxes {
+                width: 100%;
+                justify-content: space-between;  /* Spread checkboxes evenly */
+            }
+        }
+
+        /* Scheduler Styles */
+        .scheduler {
+            background-color: #2a2a2a;
+            border-radius: 12px;
+            padding: 15px;
+        }
+
+        .time-selectors {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .selector-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .selector-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        select {
+            background-color: #3a3a3a;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            padding: 8px;
+            width: 100%;
+            cursor: pointer;
+        }
+
+        .hours-display {
+            padding: 8px;
+            background-color: #3a3a3a;
+            border-radius: 4px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .time-block {
+            display: flex;
+            align-items: center;
+            position: relative;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+            border: 1px solid #2a2a2a;
+        }
+
+        .time-block.split {
+            gap: 4px;
+            background: transparent !important;
+        }
+
+        .split-section {
+            position: relative;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .split-section:first-child {
+            width: 45%;
+        }
+
+        .split-section:last-child {
+            width: 55%;
+        }
+
+        .time-input {
+            width: 100%;
+            padding: 8px;
+            border: none;
+            border-radius: 4px;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.9rem;
+            background: transparent;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        /* Scheduler Time Block Colors */
+        .morning-early {
+            background-color: #4a2639;
+        }
+
+        .day-mid {
+            background-color: #2c4a3e;
+        }
+
+        .evening {
+            background-color: #2c3e4a;
+        }
+
+        .night {
+            background-color: #2b1f36;
+        }
+
+        .morning-early.active, .split-section.morning-early.active {
+            background-color: #8a3960;
+        }
+
+        .day-mid.active, .split-section.day-mid.active {
+            background-color: #3d8066;
+        }
+
+        .evening.active, .split-section.evening.active {
+            background-color: #41718a;
+        }
+
+        .night.active, .split-section.night.active {
+            background-color: #563c76;
+        }
+
+        .x-task {
+            background-color: #1a1a1a !important;
+        }
+
+        .checkmark {
+            position: absolute;
+            right: 12px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 5px;
+            z-index: 2;
+        }
+
+        /* Board Styles */
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            height: 100%;
+            background-color: #2a2a2a;
+            border-radius: 12px;
+            padding: 5px;
+
+        }
+
+        .column {
+            background-color: #2a2a2a;
+            border-radius: 8px;
+            padding: 0.2rem;
+            min-width: 0; /* Allows text truncation */
+        }
+
+        .column h2 {
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .board .task {
+            padding: 0.5rem;
+            margin-bottom: 0.3rem;
+            border-radius: 4px;
+            cursor: move;
+            transition: background-color 0.5s ease;
+            font-size: 0.9rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .add-task {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px;
+            margin-top: 0.3rem;
+            background-color: #1a1a1a;
+            border-radius: 4px;
+            cursor: pointer;
+            height: 32px;
+        }
+
+        .add-task-input {
+            display: none;
+            width: 100%;
+            background-color: transparent;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: white;
+            font-size: 0.9rem;
+        }
+
+        .add-task-input.active {
+            display: block;
+        }
+
+        .add-task .plus-icon {
+            font-size: 1.2rem;
+            color: #666;
+            text-align: center;
+        }
+
+        /* Board Column Colors */
+        .one-thing .task {
+            background-color: #6b2b5a;
+        }
+
+        .today .task {
+            background-color: #2b5a3f;
+        }
+
+        .do-later .task {
+            background-color: #8b5735;
+        }
+
+        /* Task List Styles */
+        .task-list-container {
+            background-color: #2a2a2a;
+            border-radius: 12px;
+            padding: 15px;
+        }
+
+        .task-list {
+            list-style: none;
+        }
+
+        .task-item {
+            display: flex;
+            align-items: center;
+            padding: 6px;
+            margin: 3px 0;
+            background-color: #3a3a3a;
+            border-radius: 4px;
+            cursor: move;
+            gap: 6px;
+            font-size: 0.9rem;
+            flex-wrap: wrap;  /* Allow wrapping */
+            overflow: hidden;  /* Hide any overflow */
+        }
+
+        .task-name {
+            flex: 0 0 80px;  /* Reduced width to prevent overflow */
+            min-width: 80px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .checkboxes {
+            display: flex;
+            gap: 8px;
+            flex: 1;
+            justify-content: flex-start;
+            flex-wrap: wrap;  /* Allow checkboxes to wrap */
+            min-width: 0;  /* Allow container to shrink */
+        }
+
+        .checkbox {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #666;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex: 0 0 18px;  /* Changed: fixed size with no grow/shrink */
+        }
+
+        .checkbox:checked {
+            position: relative;
+        }
+
+        .checkbox:checked::after {
+            content: '✓';
+            position: absolute;
+            color: white;
+            font-size: 12px;
+            left: 3px;
+            top: 0px;
+        }
+
+        .drag-handle {
+            padding: 0 5px;
+            cursor: move;
+            color: #666;
+            margin-left: auto;  /* Push handle to the right */
+        }
+
+        .dragging {
+            opacity: 0.5;
+        }
+
+        /* Add new title styles */
+        .title-container {
+            text-align: center;
+            margin-bottom: 20px;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        .main-title {
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 4px;
+        }
+
+        .subtitle {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: 2px;
+        }
+
+        /* Add new styles for the add habit button and input */
+        .add-habit {
+            display: flex;
+            align-items: center;
+            padding: 6px;
+            margin: 3px 0;
+            background-color: #1a1a1a;
+            border-radius: 4px;
+            cursor: pointer;
+            gap: 6px;
+            font-size: 0.9rem;
+        }
+
+        .add-habit-input {
+            display: none;
+            width: 100px;
+            min-width: 100px;
+            background-color: #1a1a1a;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: white;
+            font-size: 0.9rem;
+        }
+
+        .add-habit-input.active {
+            display: block;
+        }
+
+        .add-habit .plus-icon {
+            font-size: 1.2rem;
+            color: #666;
+            width: 100%;
+            text-align: center;
+        }
+
+        /* Update mobile styles */
+        @media screen and (max-width: 768px) {
+            .task-item {
+                gap: 8px;
+            }
+
+            .task-name {
+                flex: 0 0 80px;  /* Keep consistent with desktop */
+            }
+
+            .checkboxes {
+                flex: 1;
+                justify-content: flex-start;
+                gap: 8px;
+                min-width: 0;  /* Allow container to shrink */
+            }
+
+            .drag-handle {
+                margin-left: auto;  /* Push handle to the right */
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Add new title section -->
+    <div class="title-container">
+        <h1 class="main-title">YATDA 2.0</h1>
+        <div class="subtitle">C0UGHMAN's Sheet</div>
+    </div>
+    
+    <div class="main-container">
+
+        <!-- Scheduler Column -->
+        <div class="scheduler">
+            <div id="timeBlocks"></div>
+        </div>
+
+
+        <!-- Task List Column -->
+        <div class="task-list-container">
+            <ul class="task-list">
+                <!-- Tasks will be generated by JavaScript -->
+            </ul>
+            <div class="add-habit">
+                <span class="plus-icon">+</span>
+                <input type="text" class="add-habit-input" placeholder="New habit">
+            </div>
+        </div>
+
+        <!-- Board Column -->
+        <div class="board">
+            <div class="column one-thing">
+                <h2>One Thing</h2>
+                <div class="tasks">
+                    <div class="task" draggable="true">https://www.amazon.com/</div>
+                    <div class="task" draggable="true">https://thehiveindex.com/</div>
+                    <div class="task" draggable="true">HIVEINDEX</div>
+                </div>
+                <div class="add-task">
+                    <span class="plus-icon">+</span>
+                    <input type="text" class="add-task-input" placeholder="New task">
+                </div>
+            </div>
+
+            <div class="column today">
+                <h2>Today</h2>
+                <div class="tasks">
+                    <div class="task" draggable="true">Ramen Club</div>
+                    <div class="task" draggable="true">levelisio telegram</div>
+                </div>
+                <div class="add-task">
+                    <span class="plus-icon">+</span>
+                    <input type="text" class="add-task-input" placeholder="New task">
+                </div>
+            </div>
+
+            <div class="column do-later">
+                <h2>Do Later</h2>
+                <div class="tasks">
+                    <div class="task" draggable="true">Pakua Academy</div>
+                </div>
+                <div class="add-task">
+                    <span class="plus-icon">+</span>
+                    <input type="text" class="add-task-input" placeholder="New task">
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+
+    
+
+  <script>
+// Initialize Firebase Configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyB5YyE7JS7sF1QeUO0r-rCnIANV5-_15Vk",
+    authDomain: "yet-another-to-do-app-c29e5.firebaseapp.com",
+    projectId: "yet-another-to-do-app-c29e5",
+    storageBucket: "yet-another-to-do-app-c29e5.appspot.com",
+    messagingSenderId: "641086458329",
+    appId: "1:641086458329:web:4ccd75830ffb852d45f1c8",
+    measurementId: "G-GYHY52H8VZ"
+};
+
+// Single Firebase initialization
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+
+// =============== Scheduler Functions ===============
+function createSplitSections(timeBlock, firstPart, secondPart) {
+    const colorClass = timeBlock.className.match(/(morning-early|day-mid|evening|night)/)[0];
+    const wasActive = timeBlock.classList.contains('active');
+    
+    timeBlock.innerHTML = '';
+    timeBlock.classList.add('split');
+    
+    const section1 = document.createElement('div');
+    section1.className = `split-section ${colorClass}`;
+    const input1 = document.createElement('input');
+    input1.type = 'text';
+    input1.className = 'time-input';
+    input1.value = firstPart.trim();
+    section1.appendChild(input1);
+    
+    const section2 = document.createElement('div');
+    section2.className = `split-section ${colorClass}`;
+    const input2 = document.createElement('input');
+    input2.type = 'text';
+    input2.className = 'time-input';
+    input2.value = secondPart.trim();
+    const checkmark = document.createElement('span');
+    checkmark.className = 'checkmark';
+    checkmark.textContent = '✓';
+    section2.appendChild(input2);
+    section2.appendChild(checkmark);
+    
+    timeBlock.appendChild(section1);
+    timeBlock.appendChild(section2);
+
+    if (wasActive) {
+        section1.classList.add('active');
+        section2.classList.add('active');
+        input1.disabled = true;
+        input2.disabled = true;
+    }
+    
+    attachEventListeners(section1);
+    attachEventListeners(section2);
+    attachBackspaceHandler(input2, timeBlock);
+    checkmark.addEventListener('click', () => handleSplitCheckmark(timeBlock));
+    
+    handleXTask(input1);
+    handleXTask(input2);
+
+    input2.focus();
+    input2.select();
+}
+
+function mergeSections(timeBlock) {
+    const colorClass = timeBlock.className.match(/(morning-early|day-mid|evening|night)/)[0];
+    const leftInput = timeBlock.querySelector('.split-section:first-child .time-input');
+    const wasActive = leftInput.disabled;
+    const leftValue = leftInput.value;
+
+    timeBlock.innerHTML = '';
+    timeBlock.classList.remove('split');
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'time-input';
+    input.value = leftValue;
+    
+    const checkmark = document.createElement('span');
+    checkmark.className = 'checkmark';
+    checkmark.textContent = '✓';
+    
+    timeBlock.appendChild(input);
+    timeBlock.appendChild(checkmark);
+    
+    if (wasActive) {
+        timeBlock.classList.add('active');
+        input.disabled = true;
+    }
+
+    attachEventListeners(timeBlock);
+    checkmark.addEventListener('click', handleRegularCheckmark);
+    handleXTask(input);
+}
+
+function attachBackspaceHandler(input, timeBlock) {
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Backspace' && this.value === '') {
+            e.preventDefault();
+            mergeSections(timeBlock);
+        }
+    });
+}
+
+function attachEventListeners(element) {
+    const input = element.querySelector('.time-input');
+    if (input) {
+        input.addEventListener('input', function() {
+            handleXTask(this);
+            handleSplitTask(this);
+        });
+
+        input.addEventListener('focus', function() {
+            if (!this.disabled) {
+                this.select();
+            }
+        });
+    }
+}
+
+function handleSplitTask(input) {
+    const value = input.value;
+    const timeBlock = input.closest('.time-block');
+    
+    if (!timeBlock.classList.contains('split') && value.includes(' / ')) {
+        const [firstPart, secondPart] = value.split(' / ');
+        createSplitSections(timeBlock, firstPart, secondPart);
+    }
+}
+
+function handleXTask(input) {
+    const container = input.closest('.split-section') || input.parentElement;
+    const value = input.value.trim().toLowerCase();
+    
+    if (value === 'x' || value.startsWith('x ')) {
+        container.classList.add('x-task');
+    } else {
+        container.classList.remove('x-task');
+    }
+}
+
+function handleSplitCheckmark(timeBlock) {
+    const sections = timeBlock.querySelectorAll('.split-section');
+    let canActivate = false;
+    
+    sections.forEach(section => {
+        if (!section.classList.contains('x-task')) {
+            canActivate = true;
+        }
+    });
+
+    if (!canActivate) return;
+
+    sections.forEach(section => {
+        if (!section.classList.contains('x-task')) {
+            section.classList.toggle('active');
+            const input = section.querySelector('.time-input');
+            if (section.classList.contains('active')) {
+                if (!input.value) {
+                    input.value = input.placeholder;
+                }
+                input.disabled = true;
+            } else {
+                input.disabled = false;
+            }
+        }
+    });
+}
+
+function handleRegularCheckmark() {
+    const timeBlock = this.closest('.time-block');
+    if (timeBlock.querySelector('.x-task')) {
+        return;
+    }
+
+    timeBlock.classList.toggle('active');
+    const input = timeBlock.querySelector('.time-input');
+    
+    if (timeBlock.classList.contains('active')) {
+        if (!input.value) {
+            input.value = input.placeholder;
+        }
+        input.disabled = true;
+    } else {
+        input.disabled = false;
+    }
+}
+
+function formatTime(hour) {
+    if (hour === 0) return "12:00 AM";
+    else if (hour < 12) return `${hour}:00 AM`;
+    else if (hour === 12) return "12:00 PM";
+    else return `${hour - 12}:00 PM`;
+}
+
+function getTimeBlockColor(hour) {
+    if (hour >= 5 && hour <= 8) return 'morning-early';
+    if (hour >= 9 && hour <= 14) return 'day-mid';
+    if (hour >= 15 && hour <= 19) return 'evening';
+    return 'night';
+}
+
+// =============== Board Functions ===============
+function initializeBoard() {
+    const tasks = document.querySelectorAll('.board .task');
+    const columns = document.querySelectorAll('.column');
+    const addTaskDivs = document.querySelectorAll('.add-task');
+
+    const columnColors = {
+        'one-thing': '#6b2b5a',
+        'today': '#2b5a3f',
+        'do-later': '#8b5735'
+    };
+
+    let dragStartColor = null;
+
+    // Add new task functionality
+    addTaskDivs.forEach(addTaskDiv => {
+        const plusIcon = addTaskDiv.querySelector('.plus-icon');
+        const input = addTaskDiv.querySelector('.add-task-input');
+
+        addTaskDiv.addEventListener('click', (e) => {
+            if (e.target === addTaskDiv || e.target === plusIcon) {
+                input.classList.add('active');
+                plusIcon.style.display = 'none';
+                input.focus();
+            }
+        });
+
+        input.addEventListener('blur', () => {
+            input.classList.remove('active');
+            plusIcon.style.display = 'block';
+            input.value = '';
+        });
+
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && input.value.trim()) {
+                const newTask = document.createElement('div');
+                newTask.className = 'task';
+                newTask.draggable = true;
+                newTask.textContent = input.value;
+                
+                const columnClass = addTaskDiv.closest('.column').classList[1];
+                newTask.style.backgroundColor = columnColors[columnClass];
+                
+                setupDragAndDrop(newTask);
+                
+                const tasksContainer = addTaskDiv.closest('.column').querySelector('.tasks');
+                tasksContainer.appendChild(newTask);
+                
+                // Reset the input
+                input.value = '';
+                input.classList.remove('active');
+                plusIcon.style.display = 'block';
+            }
+        });
+    });
+
+    // Setup drag and drop
+    tasks.forEach(setupDragAndDrop);
+
+    function setupDragAndDrop(task) {
+        task.addEventListener('dragstart', (e) => {
+            dragStartColor = window.getComputedStyle(task).backgroundColor;
+            task.classList.add('dragging');
+        });
+
+        task.addEventListener('dragend', () => {
+            task.classList.remove('dragging');
+        });
+
+        task.addEventListener('dblclick', (e) => {
+            const columnIndex = task.closest('.column').classList.contains('one-thing') ? 0 :
+                              task.closest('.column').classList.contains('today') ? 1 : 2;
+            deleteTask(task.textContent, columnIndex);
+            task.remove();
+        });
+    }
+
+    columns.forEach(column => {
+        column.addEventListener('dragover', e => {
+            e.preventDefault();
+            const draggingTask = document.querySelector('.dragging');
+            if (draggingTask) {
+                const tasksContainer = column.querySelector('.tasks');
+                tasksContainer.appendChild(draggingTask);
+                
+                const columnClass = column.classList[1];
+                const targetColor = columnColors[columnClass];
+                
+                if (dragStartColor) {
+                    draggingTask.style.transition = 'none';
+                    draggingTask.style.backgroundColor = dragStartColor;
+                    draggingTask.offsetHeight;
+                    draggingTask.style.transition = 'background-color 0.5s ease';
+                    draggingTask.style.backgroundColor = targetColor;
+                }
+            }
+        });
+    });
+}
+
+// =============== Task List Functions ===============
+function createTaskElement(taskName) {
+    const li = document.createElement('li');
+    li.className = 'task-item';
+    li.draggable = true;
+    
+    const checkboxesHtml = Array(7).fill('<input type="checkbox" class="checkbox">').join('');
+    
+    li.innerHTML = `
+        <span class="task-name">${taskName}</span>
+        <div class="checkboxes">
+            ${checkboxesHtml}
+        </div>
+        <span class="drag-handle">≡</span>
+    `;
+
+    li.querySelectorAll('.checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                const color = getRandomColor();
+                this.style.backgroundColor = color;
+                this.style.borderColor = color;
+            } else {
+                this.style.backgroundColor = '';
+                this.style.borderColor = '#666';
+            }
+        });
+    });
+
+    li.addEventListener('dblclick', (e) => {
+        if (!e.target.classList.contains('checkbox')) {
+            const habitName = li.querySelector('.task-name').textContent;
+            deleteHabit(habitName);
+            li.remove();
+        }
+    });
+
+    setupTaskListDrag(li);
+    return li;
+}
+
+function initializeTaskList() {
+    const taskList = document.querySelector('.task-list');
+    taskList.innerHTML = '';
+    
+    taskList.addEventListener('dragover', e => {
+        e.preventDefault();
+        const draggingItem = document.querySelector('.task-item.dragging');
+        if (draggingItem) {
+            const siblings = [...taskList.querySelectorAll('.task-item:not(.dragging)')];
+            const nextSibling = siblings.find(sibling => {
+                const box = sibling.getBoundingClientRect();
+                return e.clientY < box.top + box.height / 2;
+            });
+
+            if (nextSibling) {
+                taskList.insertBefore(draggingItem, nextSibling);
+            } else {
+                taskList.appendChild(draggingItem);
+            }
+        }
+    });
+}
+
+function setupTaskListDrag(item) {
+    item.addEventListener('dragstart', () => {
+        item.classList.add('dragging');
+    });
+
+    item.addEventListener('dragend', () => {
+        item.classList.remove('dragging');
+    });
+}
+
+function getRandomColor() {
+    const hue = Math.floor(Math.random() * 360);
+    return `hsl(${hue}, 70%, 40%)`;
+}
+
+// =============== Initialize Scheduler ===============
+function initializeScheduler() {
+    const timeBlocksContainer = document.getElementById('timeBlocks');
+    timeBlocksContainer.innerHTML = '';
+    
+    for (let hour = 0; hour < 24; hour++) {
+        const timeBlock = document.createElement('div');
+        timeBlock.className = `time-block ${getTimeBlockColor(hour)}`;
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'time-input';
+        input.placeholder = formatTime(hour);
+        
+        const checkmark = document.createElement('span');
+        checkmark.className = 'checkmark';
+        checkmark.textContent = '✓';
+        
+        timeBlock.appendChild(input);
+        timeBlock.appendChild(checkmark);
+        
+        attachEventListeners(timeBlock);
+        checkmark.addEventListener('click', handleRegularCheckmark);
+        
+        timeBlocksContainer.appendChild(timeBlock);
+    }
+}
+
+// =============== Firebase Operations ===============
+function setupFirebaseListeners() {
+    db.collection('chunksheet').doc('chunksheet')
+        .onSnapshot(doc => {
+            if (doc.exists) {
+                updateScheduler(doc.data());
+            }
+        }, error => {
+            console.error("Chunksheet listener error:", error);
+        });
+
+    db.collection('task')
+        .onSnapshot(snapshot => {
+            const tasks = { 0: [], 1: [], 2: [] };
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data && typeof data.when === 'number' && data.when >= 0 && data.when <= 2) {
+                    tasks[data.when].push(data.text);
+                }
+            });
+            updateBoard(tasks);
+        }, error => {
+            console.error("Task listener error:", error);
+        });
+
+    db.collection('habit')
+        .onSnapshot(snapshot => {
+            const habits = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data && data.name) {
+                    habits.push(data.name);
+                }
+            });
+            updateTaskList(habits);
+        }, error => {
+            console.error("Habit listener error:", error);
+        });
+}
+
+function updateScheduler(data) {
+    const timeBlocks = document.querySelectorAll('.time-block');
+    timeBlocks.forEach(block => {
+        const input = block.querySelector('.time-input');
+        const hour = input.placeholder.match(/\d+/)[0];
+        const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
+        
+        if (data[key]) {
+            input.value = data[key];
+            // Handle split tasks
+            if (data[key].includes(' / ')) {
+                const [firstPart, secondPart] = data[key].split(' / ');
+                createSplitSections(block, firstPart, secondPart);
+            }
+            // Handle X tasks
+            handleXTask(input);
+        }
+    });
+}
+
+function updateBoard(tasks) {
+    const columns = document.querySelectorAll('.column');
+    columns.forEach((column, index) => {
+        const tasksContainer = column.querySelector('.tasks');
+        tasksContainer.innerHTML = '';
+        if (tasks[index]) {
+            tasks[index].forEach(taskText => {
+                const task = document.createElement('div');
+                task.className = 'task';
+                task.draggable = true;
+                task.textContent = taskText;
+                setupDragAndDrop(task);
+                tasksContainer.appendChild(task);
+            });
+        }
+    });
+}
+
+function updateTaskList(habits) {
+    const taskList = document.querySelector('.task-list');
+    taskList.innerHTML = '';
+    habits.forEach(habit => {
+        const taskElement = createTaskElement(habit);
+        taskList.appendChild(taskElement);
+    });
+}
+
+// =============== Firebase Sync Functions ===============
+function syncSchedulerChanges() {
+    const timeBlocks = document.querySelectorAll('.time-block');
+    timeBlocks.forEach(block => {
+        const input = block.querySelector('.time-input');
+        input.addEventListener('change', () => {
+            try {
+                const hour = input.placeholder.match(/\d+/)[0];
+                const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
+                db.collection('chunksheet').doc('chunksheet').update({
+                    [key]: input.value
+                }).catch(error => {
+                    console.error('Error updating scheduler:', error);
+                });
+            } catch (error) {
+                console.error('Error in scheduler sync:', error);
+            }
+        });
+    });
+}
+
+function syncTaskChanges() {
+    const addTaskDivs = document.querySelectorAll('.add-task');
+    addTaskDivs.forEach((addTaskDiv, index) => {
+        const input = addTaskDiv.querySelector('.add-task-input');
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && input.value.trim()) {
+                db.collection('task').add({
+                    text: input.value.trim(),
+                    when: index
+                }).catch(error => {
+                    console.error('Error adding task:', error);
+                });
+            }
+        });
+    });
+}
+
+function syncHabitChanges() {
+    const addHabitDiv = document.querySelector('.add-habit');
+    const input = addHabitDiv.querySelector('.add-habit-input');
+    input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && input.value.trim()) {
+            db.collection('habit').add({
+                name: input.value.trim(),
+                monday: false,
+                tuesday: false,
+                wednesday: false,
+                thursday: false,
+                friday: false,
+                saturday: false,
+                sunday: false
+            }).catch(error => {
+                console.error('Error adding habit:', error);
+            });
+        }
+    });
+}
+
+// =============== Delete Operations ===============
+function deleteTask(taskText, columnIndex) {
+    db.collection('task')
+        .where('text', '==', taskText)
+        .where('when', '==', columnIndex)
+        .get()
+        .then(querySnapshot => {
+            querySnapshot.forEach(doc => {
+                doc.ref.delete().catch(error => {
+                    console.error('Error deleting task:', error);
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Error finding task to delete:', error);
+        });
+}
+
+function deleteHabit(habitName) {
+    db.collection('habit')
+        .where('name', '==', habitName)
+        .get()
+        .then(querySnapshot => {
+            querySnapshot.forEach(doc => {
+                doc.ref.delete().catch(error => {
+                    console.error('Error deleting habit:', error);
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Error finding habit to delete:', error);
+        });
+}
+
+// =============== Main Initialization ===============
+document.addEventListener('DOMContentLoaded', () => {
+    // Sign in anonymously first
+    auth.signInAnonymously()
+        .then(() => {
+            console.log('Signed in anonymously');
+            
+            // Initialize all components
+            initializeScheduler();
+            initializeBoard();
+            initializeTaskList();
+            initializeAddHabit();
+            setupDoubleClickHandlers();
+            
+            // Set up Firebase listeners
+            setupFirebaseListeners();
+            
+            // Set up sync handlers
+            syncSchedulerChanges();
+            syncTaskChanges();
+            syncHabitChanges();
+        })
+        .catch((error) => {
+            console.error('Error signing in:', error);
+        });
+});
+
+</script>
+    
+</body>
+</html>
