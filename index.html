@@ -514,7 +514,7 @@
     
 
   <script>
-// Initialize Firebase Configuration
+// Initialize Firebase with your config
 const firebaseConfig = {
     apiKey: "AIzaSyB5YyE7JS7sF1QeUO0r-rCnIANV5-_15Vk",
     authDomain: "yet-another-to-do-app-c29e5.firebaseapp.com",
@@ -525,10 +525,97 @@ const firebaseConfig = {
     measurementId: "G-GYHY52H8VZ"
 };
 
-// Single Firebase initialization
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
+
+// Track authentication state
+let isAuthenticated = false;
+
+// Main initialization
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize UI components first
+    initializeScheduler();
+    initializeBoard();
+    initializeTaskList();
+    initializeAddHabit();
+    setupDoubleClickHandlers();
+
+    // Handle authentication state changes
+    auth.onAuthStateChanged((user) => {
+        if (user) {
+            console.log('User is authenticated:', user.uid);
+            isAuthenticated = true;
+            
+            // Only set up Firebase listeners after authentication
+            setupFirebaseListeners();
+            
+            // Set up sync handlers
+            syncSchedulerChanges();
+            syncTaskChanges();
+            syncHabitChanges();
+        } else {
+            console.log('User is not authenticated, attempting anonymous sign-in...');
+            isAuthenticated = false;
+            
+            // Attempt anonymous sign-in
+            auth.signInAnonymously()
+                .catch((error) => {
+                    console.error('Error signing in:', error);
+                    // If anonymous auth fails, fall back to local storage
+                    if (error.code === 'auth/admin-restricted-operation') {
+                        console.log('Falling back to local storage...');
+                        setupLocalStorageListeners();
+                    }
+                });
+        }
+    });
+});
+
+// Add fallback local storage functions
+function setupLocalStorageListeners() {
+    const chunksheet = JSON.parse(localStorage.getItem('chunksheet') || '{}');
+    updateScheduler(chunksheet);
+
+    const tasks = JSON.parse(localStorage.getItem('tasks') || '{"0":[],"1":[],"2":[]}');
+    updateBoard(tasks);
+
+    const habits = JSON.parse(localStorage.getItem('habits') || '[]');
+    updateTaskList(habits);
+}
+
+// Modify your database operations to check authentication
+function writeToDatabase(collection, data) {
+    if (isAuthenticated) {
+        return db.collection(collection).add(data);
+    } else {
+        // Fall back to localStorage
+        const stored = JSON.parse(localStorage.getItem(collection) || '[]');
+        stored.push(data);
+        localStorage.setItem(collection, JSON.stringify(stored));
+        return Promise.resolve({ id: Date.now().toString() });
+    }
+}
+
+// Update your sync functions to use the new write function
+function syncTaskChanges() {
+    const addTaskDivs = document.querySelectorAll('.add-task');
+    addTaskDivs.forEach((addTaskDiv, index) => {
+        const input = addTaskDiv.querySelector('.add-task-input');
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && input.value.trim()) {
+                writeToDatabase('task', {
+                    text: input.value.trim(),
+                    when: index
+                }).catch(error => {
+                    console.error('Error adding task:', error);
+                });
+            }
+        });
+    });
+}
+////////
 
 // =============== Scheduler Functions ===============
 function createSplitSections(timeBlock, firstPart, secondPart) {
@@ -1028,23 +1115,6 @@ function syncSchedulerChanges() {
                 });
             } catch (error) {
                 console.error('Error in scheduler sync:', error);
-            }
-        });
-    });
-}
-
-function syncTaskChanges() {
-    const addTaskDivs = document.querySelectorAll('.add-task');
-    addTaskDivs.forEach((addTaskDiv, index) => {
-        const input = addTaskDiv.querySelector('.add-task-input');
-        input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && input.value.trim()) {
-                db.collection('task').add({
-                    text: input.value.trim(),
-                    when: index
-                }).catch(error => {
-                    console.error('Error adding task:', error);
-                });
             }
         });
     });
