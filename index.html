@@ -1224,13 +1224,15 @@ function setupHabitDragAndDrop(habit) {
     });
     
     habit.addEventListener('dragstart', (e) => {
-        // Store the habit element being dragged
         habit.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
+        // Add some transparency while dragging
+        habit.style.opacity = '0.5';
     });
 
     habit.addEventListener('dragend', () => {
         habit.classList.remove('dragging');
+        // Restore opacity
+        habit.style.opacity = '1';
         
         // Get updated order of habits
         const habitList = habit.closest('.task-list');
@@ -1817,12 +1819,13 @@ function setupHabitListContainer() {
         const draggingHabit = document.querySelector('.task-item.dragging');
         if (!draggingHabit) return;
 
-        // Get the closest habit element based on mouse position
         const afterElement = getDragAfterElement(habitList, e.clientY);
-        if (afterElement) {
-            habitList.insertBefore(draggingHabit, afterElement);
+        const currentElement = draggingHabit;
+
+        if (afterElement === null) {
+            habitList.appendChild(currentElement);
         } else {
-            habitList.appendChild(draggingHabit);
+            habitList.insertBefore(currentElement, afterElement);
         }
     });
 
@@ -1872,6 +1875,7 @@ function initializeDragAndDrop() {
 
 
  
+
 
 
 
