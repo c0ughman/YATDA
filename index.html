@@ -1064,32 +1064,35 @@ function setupFirebaseListeners() {
     });
 
     // Existing habit listener
-    db.collection('habit').onSnapshot(snapshot => {
-        const habits = [];
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            if (data && data.name) {
-                habits.push({
-                    name: data.name,
-                    monday: data.monday || false,
-                    tuesday: data.tuesday || false,
-                    wednesday: data.wednesday || false,
-                    thursday: data.thursday || false,
-                    friday: data.friday || false,
-                    saturday: data.saturday || false,
-                    sunday: data.sunday || false,
-                    order: data.order || 0
-                });
-            }
+    db.collection('habit')
+        .orderBy('order')
+        .onSnapshot(snapshot => {
+            const habits = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data && data.name) {
+                    habits.push({
+                        id: doc.id,
+                        name: data.name,
+                        monday: data.monday || false,
+                        tuesday: data.tuesday || false,
+                        wednesday: data.wednesday || false,
+                        thursday: data.thursday || false,
+                        friday: data.friday || false,
+                        saturday: data.saturday || false,
+                        sunday: data.sunday || false,
+                        order: data.order || 0
+                    });
+                }
+            });
+            // Sort habits by order before updating
+            habits.sort((a, b) => a.order - b.order);
+            updateHabitList(habits);
+            // Reinitialize drag and drop after updating habits
+            initializeDragAndDrop();
+        }, error => {
+            console.error("Habit listener error:", error);
         });
-        // Sort habits by order before updating
-        habits.sort((a, b) => (a.order || 0) - (b.order || 0));
-        updateHabitList(habits);
-        // Reinitialize drag and drop after updating habits
-        initializeDragAndDrop();
-    }, error => {
-        console.error("Habit listener error:", error);
-    });
 }
 
 // Update initializeBoard to use the global setupDragAndDrop
@@ -1216,7 +1219,6 @@ function setupHabitDragAndDrop(habit) {
 
     habit.draggable = true;
     
-    // Prevent dragging when clicking checkboxes
     habit.querySelectorAll('.checkbox').forEach(checkbox => {
         checkbox.addEventListener('mousedown', (e) => {
             e.stopPropagation();
@@ -1225,43 +1227,45 @@ function setupHabitDragAndDrop(habit) {
     
     habit.addEventListener('dragstart', (e) => {
         habit.classList.add('dragging');
-        // Add some transparency while dragging
         habit.style.opacity = '0.5';
     });
 
-    habit.addEventListener('dragend', () => {
+    habit.addEventListener('dragend', async () => {
         habit.classList.remove('dragging');
-        // Restore opacity
         habit.style.opacity = '1';
         
-        // Get updated order of habits
-        const habitList = habit.closest('.task-list');
-        const habits = [...habitList.querySelectorAll('.task-item')];
-        
-        // Update order in Firebase
         if (isAuthenticated) {
-            const batch = db.batch();
-            
-            // Get all habit documents
-            db.collection('habit').get()
-                .then(snapshot => {
-                    const habitDocs = new Map();
-                    snapshot.forEach(doc => {
-                        habitDocs.set(doc.data().name, doc.ref);
-                    });
-                    
-                    // Update each habit's order
-                    habits.forEach((habitElement, index) => {
-                        const habitName = habitElement.querySelector('.task-name').textContent;
-                        const docRef = habitDocs.get(habitName);
-                        if (docRef) {
-                            batch.update(docRef, { order: index });
-                        }
-                    });
-                    
-                    return batch.commit();
-                })
-                .catch(error => console.error('Error updating habit order:', error));
+            try {
+                const habitList = habit.closest('.task-list');
+                const habits = [...habitList.querySelectorAll('.task-item')];
+                
+                // Create a batch for all updates
+                const batch = db.batch();
+                
+                // Get all habit documents first
+                const snapshot = await db.collection('habit').get();
+                const habitDocs = new Map();
+                snapshot.forEach(doc => {
+                    habitDocs.set(doc.data().name, doc);
+                });
+                
+                // Update each habit's order
+                const updates = habits.map((habitElement, index) => {
+                    const habitName = habitElement.querySelector('.task-name').textContent;
+                    const doc = habitDocs.get(habitName);
+                    if (doc) {
+                        batch.update(doc.ref, { order: index * 1000 }); // Use larger numbers to allow for future reordering
+                    }
+                });
+                
+                // Commit all updates
+                await batch.commit();
+                
+            } catch (error) {
+                console.error('Error updating habit order:', error);
+                // Optionally refresh the list to ensure consistency
+                setupFirebaseListeners();
+            }
         }
     });
 }
@@ -1527,6 +1531,7 @@ function setupFirebaseListeners() {
                 const data = doc.data();
                 if (data && data.name) {
                     habits.push({
+                        id: doc.id,
                         name: data.name,
                         monday: data.monday || false,
                         tuesday: data.tuesday || false,
@@ -1539,6 +1544,8 @@ function setupFirebaseListeners() {
                     });
                 }
             });
+            // Sort habits by order before updating
+            habits.sort((a, b) => a.order - b.order);
             updateHabitList(habits);
         }, error => {
             console.error("Habit listener error:", error);
@@ -1872,6 +1879,9 @@ function initializeDragAndDrop() {
 </html>
 
 
+
+
+ 
 
 
  
