@@ -805,19 +805,49 @@ function getTimeBlockColor(hour) {
     return 'night';
 }
 
-// =============== Board Functions ===============
+// Global variables for drag and drop
+const columnColors = {
+    'one-thing': '#6b2b5a',
+    'today': '#2b5a3f',
+    'do-later': '#8b5735'
+};
+
+let dragStartColor = null;
+
+// Move setupDragAndDrop out of initializeBoard
+function setupDragAndDrop(task) {
+    if (!task) return; // Add safety check
+
+    // Remove any existing listeners first
+    const newTask = task.cloneNode(true);
+    task.parentNode?.replaceChild(newTask, task);
+    
+    newTask.addEventListener('dragstart', (e) => {
+        dragStartColor = window.getComputedStyle(newTask).backgroundColor;
+        newTask.classList.add('dragging');
+    });
+
+    newTask.addEventListener('dragend', () => {
+        newTask.classList.remove('dragging');
+    });
+
+    newTask.addEventListener('dblclick', (e) => {
+        const columnIndex = newTask.closest('.column')?.classList.contains('one-thing') ? 0 :
+                          newTask.closest('.column')?.classList.contains('today') ? 1 : 2;
+        if (typeof columnIndex === 'number') {
+            deleteTask(newTask.textContent, columnIndex);
+            newTask.remove();
+        }
+    });
+
+    return newTask;
+}
+
+// Update initializeBoard to use the global setupDragAndDrop
 function initializeBoard() {
     const tasks = document.querySelectorAll('.board .task');
     const columns = document.querySelectorAll('.column');
     const addTaskDivs = document.querySelectorAll('.add-task');
-
-    const columnColors = {
-        'one-thing': '#6b2b5a',
-        'today': '#2b5a3f',
-        'do-later': '#8b5735'
-    };
-
-    let dragStartColor = null;
 
     // Add new task functionality
     addTaskDivs.forEach(addTaskDiv => {
@@ -845,13 +875,17 @@ function initializeBoard() {
                 newTask.draggable = true;
                 newTask.textContent = input.value;
                 
-                const columnClass = addTaskDiv.closest('.column').classList[1];
-                newTask.style.backgroundColor = columnColors[columnClass];
+                const columnClass = addTaskDiv.closest('.column')?.classList[1];
+                if (columnClass && columnColors[columnClass]) {
+                    newTask.style.backgroundColor = columnColors[columnClass];
+                }
                 
-                setupDragAndDrop(newTask);
+                const setupTask = setupDragAndDrop(newTask);
                 
-                const tasksContainer = addTaskDiv.closest('.column').querySelector('.tasks');
-                tasksContainer.appendChild(newTask);
+                const tasksContainer = addTaskDiv.closest('.column')?.querySelector('.tasks');
+                if (tasksContainer) {
+                    tasksContainer.appendChild(setupTask);
+                }
                 
                 // Reset the input
                 input.value = '';
@@ -861,44 +895,34 @@ function initializeBoard() {
         });
     });
 
-    // Setup drag and drop
-    tasks.forEach(setupDragAndDrop);
+    // Setup existing tasks
+    tasks.forEach(task => {
+        const setupTask = setupDragAndDrop(task);
+        if (setupTask && task.parentNode) {
+            task.parentNode.replaceChild(setupTask, task);
+        }
+    });
 
-    function setupDragAndDrop(task) {
-        task.addEventListener('dragstart', (e) => {
-            dragStartColor = window.getComputedStyle(task).backgroundColor;
-            task.classList.add('dragging');
-        });
-
-        task.addEventListener('dragend', () => {
-            task.classList.remove('dragging');
-        });
-
-        task.addEventListener('dblclick', (e) => {
-            const columnIndex = task.closest('.column').classList.contains('one-thing') ? 0 :
-                              task.closest('.column').classList.contains('today') ? 1 : 2;
-            deleteTask(task.textContent, columnIndex);
-            task.remove();
-        });
-    }
-
+    // Setup column drop zones
     columns.forEach(column => {
         column.addEventListener('dragover', e => {
             e.preventDefault();
             const draggingTask = document.querySelector('.dragging');
             if (draggingTask) {
                 const tasksContainer = column.querySelector('.tasks');
-                tasksContainer.appendChild(draggingTask);
-                
-                const columnClass = column.classList[1];
-                const targetColor = columnColors[columnClass];
-                
-                if (dragStartColor) {
-                    draggingTask.style.transition = 'none';
-                    draggingTask.style.backgroundColor = dragStartColor;
-                    draggingTask.offsetHeight;
-                    draggingTask.style.transition = 'background-color 0.5s ease';
-                    draggingTask.style.backgroundColor = targetColor;
+                if (tasksContainer) {
+                    tasksContainer.appendChild(draggingTask);
+                    
+                    const columnClass = column.classList[1];
+                    const targetColor = columnColors[columnClass];
+                    
+                    if (dragStartColor && targetColor) {
+                        draggingTask.style.transition = 'none';
+                        draggingTask.style.backgroundColor = dragStartColor;
+                        draggingTask.offsetHeight; // Force reflow
+                        draggingTask.style.transition = 'background-color 0.5s ease';
+                        draggingTask.style.backgroundColor = targetColor;
+                    }
                 }
             }
         });
