@@ -827,22 +827,53 @@ function getTimeBlockColor(hour) {
     if (hour >= 15 && hour <= 19) return 'evening';
     return 'night';
 }
-// =============== Board Functions ===============
+
+// Global variables for drag and drop
+const columnColors = {
+    'one-thing': '#6b2b5a',
+    'today': '#2b5a3f',
+    'do-later': '#8b5735'
+};
+
+let dragStartColor = null;
+
+// Move setupDragAndDrop out of initializeBoard
+function setupDragAndDrop(task) {
+    if (!task) return; // Add safety check
+
+    // Remove any existing listeners first
+    const newTask = task.cloneNode(true);
+    task.parentNode?.replaceChild(newTask, task);
+    
+    newTask.addEventListener('dragstart', (e) => {
+        dragStartColor = window.getComputedStyle(newTask).backgroundColor;
+        newTask.classList.add('dragging');
+    });
+
+    newTask.addEventListener('dragend', () => {
+        newTask.classList.remove('dragging');
+    });
+
+    newTask.addEventListener('dblclick', (e) => {
+        const columnIndex = newTask.closest('.column')?.classList.contains('one-thing') ? 0 :
+                          newTask.closest('.column')?.classList.contains('today') ? 1 : 2;
+        if (typeof columnIndex === 'number') {
+            deleteTask(newTask.textContent, columnIndex);
+            newTask.remove();
+        }
+    });
+
+    return newTask;
+}
+
+// Update initializeBoard to use the global setupDragAndDrop
 function initializeBoard() {
     const tasks = document.querySelectorAll('.board .task');
     const columns = document.querySelectorAll('.column');
     const addTaskDivs = document.querySelectorAll('.add-task');
 
-    const columnColors = {
-        'one-thing': '#6b2b5a',
-        'today': '#2b5a3f',
-        'do-later': '#8b5735'
-    };
-
-    let dragStartColor = null;
-
     // Add new task functionality
-    addTaskDivs.forEach(addTaskDiv => {
+    addTaskDivs.forEach((addTaskDiv, columnIndex) => {
         const plusIcon = addTaskDiv.querySelector('.plus-icon');
         const input = addTaskDiv.querySelector('.add-task-input');
 
@@ -862,20 +893,15 @@ function initializeBoard() {
 
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && input.value.trim()) {
-                const newTask = document.createElement('div');
-                newTask.className = 'task';
-                newTask.draggable = true;
-                newTask.textContent = input.value;
+                if (isAuthenticated) {
+                    db.collection('task').add({
+                        text: input.value.trim(),
+                        when: columnIndex
+                    }).catch(error => {
+                        console.error('Error adding task:', error);
+                    });
+                }
                 
-                const columnClass = addTaskDiv.closest('.column').classList[1];
-                newTask.style.backgroundColor = columnColors[columnClass];
-                
-                setupDragAndDrop(newTask);
-                
-                const tasksContainer = addTaskDiv.closest('.column').querySelector('.tasks');
-                tasksContainer.appendChild(newTask);
-                
-                // Reset the input
                 input.value = '';
                 input.classList.remove('active');
                 plusIcon.style.display = 'block';
@@ -883,48 +909,114 @@ function initializeBoard() {
         });
     });
 
-    // Setup drag and drop
-    tasks.forEach(setupDragAndDrop);
+    // Setup existing tasks
+    tasks.forEach(task => {
+        setupTaskDragAndDrop(task);
+    });
 
-    function setupDragAndDrop(task) {
-        task.addEventListener('dragstart', (e) => {
-            dragStartColor = window.getComputedStyle(task).backgroundColor;
-            task.classList.add('dragging');
-        });
-
-        task.addEventListener('dragend', () => {
-            task.classList.remove('dragging');
-        });
-
-        // Add double-click handler for tasks
-        task.addEventListener('dblclick', (e) => {
-            task.remove();
-        });
-    }
-
-    columns.forEach(column => {
+    // Setup column drop zones
+    columns.forEach((column, columnIndex) => {
         column.addEventListener('dragover', e => {
             e.preventDefault();
-            const draggingTask = document.querySelector('.dragging');
+            const draggingTask = document.querySelector('.board .task.dragging');
             if (draggingTask) {
                 const tasksContainer = column.querySelector('.tasks');
-                tasksContainer.appendChild(draggingTask);
-                
-                const columnClass = column.classList[1];
-                const targetColor = columnColors[columnClass];
-                
-                if (dragStartColor) {
-                    draggingTask.style.transition = 'none';
-                    draggingTask.style.backgroundColor = dragStartColor;
-                    draggingTask.offsetHeight;
-                    draggingTask.style.transition = 'background-color 0.5s ease';
-                    draggingTask.style.backgroundColor = targetColor;
+                if (tasksContainer) {
+                    tasksContainer.appendChild(draggingTask);
+                    
+                    // Update task position in database
+                    if (isAuthenticated) {
+                        db.collection('task')
+                            .where('text', '==', draggingTask.textContent)
+                            .get()
+                            .then(querySnapshot => {
+                                querySnapshot.forEach(doc => {
+                                    doc.ref.update({
+                                        when: columnIndex
+                                    }).catch(error => {
+                                        console.error('Error updating task position:', error);
+                                    });
+                                });
+                            })
+                            .catch(error => {
+                                console.error('Error finding task to update:', error);
+                            });
+                    }
                 }
             }
         });
     });
 }
 
+function setupTaskDragAndDrop(task) {
+    if (!task) return;
+
+    // Remove any existing listeners first
+    const newTask = task.cloneNode(true);
+    task.parentNode?.replaceChild(newTask, task);
+    
+    newTask.addEventListener('dragstart', () => {
+        dragStartColor = window.getComputedStyle(newTask).backgroundColor;
+        newTask.classList.add('dragging');
+    });
+
+    newTask.addEventListener('dragend', () => {
+        newTask.classList.remove('dragging');
+    });
+
+    return newTask;
+}
+
+// =============== Habit Functions ===============
+function setupHabitDragAndDrop(habit) {
+    if (!habit) return;
+
+    // Remove any existing listeners first
+    const newHabit = habit.cloneNode(true);
+    habit.parentNode?.replaceChild(newHabit, habit);
+    
+    newHabit.addEventListener('dragstart', () => {
+        newHabit.classList.add('dragging');
+    });
+
+    newHabit.addEventListener('dragend', () => {
+        newHabit.classList.remove('dragging');
+        
+        // Get all habits in new order
+        const habitList = newHabit.closest('.task-list');
+        const habits = [...habitList.querySelectorAll('.task-item')];
+        const habitOrder = habits.map(h => h.querySelector('.task-name').textContent);
+        
+        // Update order in Firebase if authenticated
+        if (isAuthenticated) {
+            // Create a batch to update all habits
+            const batch = db.batch();
+            
+            // Get all habits and their refs
+            db.collection('habit').get().then(snapshot => {
+                const habitDocs = new Map();
+                snapshot.forEach(doc => {
+                    habitDocs.set(doc.data().name, doc.ref);
+                });
+                
+                // Update each habit's order
+                habitOrder.forEach((habitName, index) => {
+                    const habitRef = habitDocs.get(habitName);
+                    if (habitRef) {
+                        batch.update(habitRef, { order: index });
+                    }
+                });
+                
+                // Commit the batch
+                batch.commit().catch(error => {
+                    console.error('Error updating habit order:', error);
+                });
+            });
+        }
+    });
+
+    return newHabit;
+}
 
 function getRandomColor() {
     const hue = Math.floor(Math.random() * 360);
@@ -1517,6 +1609,16 @@ function initializeDragAndDrop() {
     
 </body>
 </html>
+
+
+
+
+ 
+
+
+
+
+
 
 
 
