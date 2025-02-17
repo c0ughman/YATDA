@@ -527,45 +527,7 @@ const auth = firebase.auth();
 // Track authentication state
 let isAuthenticated = false;
 
-// Main initialization
-document.addEventListener('DOMContentLoaded', () => {
-    // Initialize UI components first
-    initializeScheduler();
-    initializeBoard();
-    initializeHabitList();
-    initializeAddHabit();
-    setupDoubleClickHandlers();
 
-    // Handle authentication state changes
-    auth.onAuthStateChanged((user) => {
-        if (user) {
-            console.log('User is authenticated:', user.uid);
-            isAuthenticated = true;
-            
-            // Only set up Firebase listeners after authentication
-            setupFirebaseListeners();
-            
-            // Set up sync handlers
-            syncSchedulerChanges();
-            syncTaskChanges();
-            syncHabitChanges();
-        } else {
-            console.log('User is not authenticated, attempting anonymous sign-in...');
-            isAuthenticated = false;
-            
-            // Attempt anonymous sign-in
-            auth.signInAnonymously()
-                .catch((error) => {
-                    console.error('Error signing in:', error);
-                    // If anonymous auth fails, fall back to local storage
-                    if (error.code === 'auth/admin-restricted-operation') {
-                        console.log('Falling back to local storage...');
-                        setupLocalStorageListeners();
-                    }
-                });
-        }
-    });
-});
 
 // Add fallback local storage functions
 function setupLocalStorageListeners() {
@@ -1047,32 +1009,41 @@ function initializeDragAndDrop() {
 
 // Update Firebase listeners to reinitialize drag and drop
 function setupFirebaseListeners() {
-    // Existing task listener
-    db.collection('task').onSnapshot(snapshot => {
-        const tasks = { 0: [], 1: [], 2: [] };
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            if (data && typeof data.when === 'number' && data.when >= 0 && data.when <= 2) {
-                tasks[data.when].push(data.text);
+    // Chunksheet listener
+    db.collection('chunksheet').doc('chunksheet')
+        .onSnapshot(doc => {
+            if (doc.exists) {
+                updateScheduler(doc.data());
             }
+        }, error => {
+            console.error("Chunksheet listener error:", error);
         });
-        updateBoard(tasks);
-        // Reinitialize drag and drop after updating board
-        initializeDragAndDrop();
-    }, error => {
-        console.error("Task listener error:", error);
-    });
 
-    // Update the habit listener to use a single listener
+    // Task listener
+    db.collection('task')
+        .onSnapshot(snapshot => {
+            const tasks = { 0: [], 1: [], 2: [] };
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data && typeof data.when === 'number' && data.when >= 0 && data.when <= 2) {
+                    tasks[data.when].push(data.text);
+                }
+            });
+            updateBoard(tasks);
+        }, error => {
+            console.error("Task listener error:", error);
+        });
+
+    // Single habit listener
     const unsubscribeHabits = db.collection('habit')
         .orderBy('order')
         .onSnapshot(snapshot => {
             const habits = [];
-            snapshot.docChanges().forEach(change => {
-                const data = change.doc.data();
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
                 if (data && data.name) {
                     habits.push({
-                        id: change.doc.id,
+                        id: doc.id,
                         name: data.name,
                         monday: data.monday || false,
                         tuesday: data.tuesday || false,
@@ -1092,7 +1063,6 @@ function setupFirebaseListeners() {
             console.error("Habit listener error:", error);
         });
 }
-
 // Update initializeBoard to use the global setupDragAndDrop
 function initializeBoard() {
     const tasks = document.querySelectorAll('.board .task');
@@ -1702,34 +1672,37 @@ function syncHabitChanges() {
     });
 }
 
-// =============== Main Initialization ===============
 document.addEventListener('DOMContentLoaded', () => {
-    // Sign in anonymously first
-    auth.signInAnonymously()
-        .then(() => {
-            console.log('Signed in anonymously');
+    // Initialize UI components first
+    initializeScheduler();
+    initializeBoard();
+    initializeHabitList();
+    initializeAddHabit();
+    setupDoubleClickHandlers();
+
+    // Handle authentication state changes
+    auth.onAuthStateChanged((user) => {
+        if (user) {
+            console.log('User is authenticated:', user.uid);
+            isAuthenticated = true;
             
-            // Initialize all components
-            initializeScheduler();
-            initializeBoard();
-            initializeHabitList();
-            initializeAddHabit();
-            setupDoubleClickHandlers();
-            
-            // Initialize drag and drop
-            initializeDragAndDrop();
-            
-            // Set up Firebase listeners
+            // Only set up Firebase listeners once after authentication
             setupFirebaseListeners();
+        } else {
+            console.log('User is not authenticated, attempting anonymous sign-in...');
+            isAuthenticated = false;
             
-            // Set up sync handlers
-            syncSchedulerChanges();
-            syncTaskChanges();
-            syncHabitChanges();
-        })
-        .catch((error) => {
-            console.error('Error signing in:', error);
-        });
+            // Attempt anonymous sign-in
+            auth.signInAnonymously()
+                .catch((error) => {
+                    console.error('Error signing in:', error);
+                    if (error.code === 'auth/admin-restricted-operation') {
+                        console.log('Falling back to local storage...');
+                        setupLocalStorageListeners();
+                    }
+                });
+        }
+    });
 });
 
 function initializeHabitList() {
