@@ -1298,6 +1298,23 @@ function createHabitElement(habitData) {
         <span class="drag-handle">≡</span>
     `;
 
+    // Add double-click handler directly to the habit element
+    li.addEventListener('dblclick', (e) => {
+        // Only prevent deletion if clicking directly on a checkbox
+        if (!e.target.classList.contains('checkbox')) {
+            const habitName = habitData.name;
+            if (isAuthenticated) {
+                deleteHabit(habitName);
+            } else {
+                const habits = JSON.parse(localStorage.getItem('habits') || '[]');
+                const filteredHabits = habits.filter(habit => habit.name !== habitName);
+                localStorage.setItem('habits', JSON.stringify(filteredHabits));
+                updateHabitList(filteredHabits.map(h => h.name));
+            }
+            li.remove();
+        }
+    });
+
     // Add styling to checked boxes
     li.querySelectorAll('.checkbox').forEach(checkbox => {
         if (checkbox.checked) {
@@ -1879,7 +1896,16 @@ function initializeDragAndDrop() {
     
 </body>
 </html>
+
+
+
+
  
+
+
+ 
+
+
 
 
 
