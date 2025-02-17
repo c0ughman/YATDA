@@ -1648,7 +1648,7 @@ function setupFirebaseListeners() {
 
 function updateScheduler(data, target = document.getElementById('timeBlocks')) {
     if (!data) return;
-    const timeBlocks = target.querySelectorAll('.time-block');
+    const timeBlocks = target.querySelectorAll('.time-input');
     
     timeBlocks.forEach(block => {
         const input = block.querySelector('.time-input');
@@ -1740,7 +1740,7 @@ function deleteHabit(habitName) {
 
 // =============== Firebase Sync Functions ===============
 function syncSchedulerChanges() {
-    const timeBlocks = document.querySelectorAll('.time-block');
+    const timeBlocks = document.querySelectorAll('.time-input');
     timeBlocks.forEach(block => {
         const input = block.querySelector('.time-input');
         input.addEventListener('change', () => {
@@ -1962,6 +1962,19 @@ function createDayScheduler(dayName, docName) {
         input.className = 'time-input';
         input.placeholder = formatTime(hour);
         
+        // Add change event listener for Firebase sync
+        input.addEventListener('change', () => {
+            const hour = input.placeholder.match(/\d+/)[0];
+            const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
+            
+            // Update Firebase with the new value
+            db.collection('chunksheet').doc(docName).set({
+                [key]: input.value
+            }, { merge: true }).catch(error => {
+                console.error('Error updating scheduler:', error);
+            });
+        });
+        
         const checkmark = document.createElement('span');
         checkmark.className = 'checkmark';
         checkmark.textContent = '✓';
@@ -2026,8 +2039,6 @@ function expandSchedulers() {
 
 
  
-
-
 
 
 
