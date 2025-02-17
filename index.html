@@ -955,12 +955,22 @@ function setupTaskDragAndDrop(task) {
     const newTask = task.cloneNode(true);
     task.parentNode?.replaceChild(newTask, task);
     
-    newTask.addEventListener('dragstart', () => {
+    newTask.addEventListener('dragstart', (e) => {
+        dragStartColor = window.getComputedStyle(newTask).backgroundColor;
         newTask.classList.add('dragging');
     });
 
     newTask.addEventListener('dragend', () => {
         newTask.classList.remove('dragging');
+    });
+
+    newTask.addEventListener('dblclick', (e) => {
+        const columnIndex = newTask.closest('.column')?.classList.contains('one-thing') ? 0 :
+                          newTask.closest('.column')?.classList.contains('today') ? 1 : 2;
+        if (typeof columnIndex === 'number') {
+            deleteTask(newTask.textContent, columnIndex);
+            newTask.remove();
+        }
     });
 
     return newTask;
@@ -1496,6 +1506,10 @@ function initializeHabitList() {
     
 </body>
 </html>
+
+
+
+
 
 
 
