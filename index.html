@@ -1231,7 +1231,6 @@ function setupHabitDragAndDrop(habit) {
             return;
         }
         habit.classList.add('dragging');
-        e.dataTransfer.setData('text/plain', habit.querySelector('.task-name').textContent);
     });
 
     habit.addEventListener('dragend', async () => {
@@ -1243,27 +1242,32 @@ function setupHabitDragAndDrop(habit) {
             // Get all habits in their current order
             const habitList = habit.closest('.task-list');
             const habits = [...habitList.querySelectorAll('.task-item')];
-            const habitOrder = habits.map((h, index) => ({
-                name: h.querySelector('.task-name').textContent,
-                order: index
-            }));
-
-            // Get all habit documents
-            const snapshot = await db.collection('habit').get();
+            
+            // Create a batch
             const batch = db.batch();
-
-            // Update each habit's order in the batch
+            
+            // Get all habit documents first
+            const snapshot = await db.collection('habit').get();
+            const habitDocs = new Map();
+            
+            // Create a map of habit names to their document references
             snapshot.forEach(doc => {
-                const habitData = doc.data();
-                const orderData = habitOrder.find(h => h.name === habitData.name);
-                if (orderData) {
-                    batch.update(doc.ref, { order: orderData.order });
+                habitDocs.set(doc.data().name, doc.ref);
+            });
+            
+            // Update each habit's order
+            habits.forEach((habitElement, index) => {
+                const habitName = habitElement.querySelector('.task-name').textContent;
+                const docRef = habitDocs.get(habitName);
+                
+                if (docRef) {
+                    batch.update(docRef, { order: index });
                 }
             });
-
-            // Commit the batch
+            
+            // Commit all updates
             await batch.commit();
-            console.log('Successfully updated habit order');
+            
         } catch (error) {
             console.error('Error updating habit order:', error);
         }
@@ -1815,23 +1819,35 @@ function setupColumnDragHandlers(columns) {
 
 // Add new setupHabitListContainer function
 function setupHabitListContainer(habitList) {
-    habitList.addEventListener('dragover', e => {
-        e.preventDefault();
-        const draggingItem = document.querySelector('.task-item.dragging');
-        if (draggingItem) {
-            const siblings = [...habitList.querySelectorAll('.task-item:not(.dragging)')];
-            const nextSibling = siblings.find(sibling => {
-                const box = sibling.getBoundingClientRect();
-                return e.clientY < box.top + box.height / 2;
-            });
+    if (!habitList) return;
 
-            if (nextSibling) {
-                habitList.insertBefore(draggingItem, nextSibling);
-            } else {
-                habitList.appendChild(draggingItem);
-            }
+    habitList.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const draggingHabit = document.querySelector('.task-item.dragging');
+        if (!draggingHabit) return;
+
+        const afterElement = getDragAfterElement(habitList, e.clientY);
+        if (afterElement) {
+            habitList.insertBefore(draggingHabit, afterElement);
+        } else {
+            habitList.appendChild(draggingHabit);
         }
     });
+}
+
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.task-item:not(.dragging)')]
+    
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect()
+        const offset = y - box.top - box.height / 2
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child }
+        } else {
+            return closest
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element
 }
 
 // Add new initializeDragAndDrop function
@@ -1857,6 +1873,9 @@ function initializeDragAndDrop() {
 </html>
 
 
+
+
+ 
 
 
  
