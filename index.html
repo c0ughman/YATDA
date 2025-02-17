@@ -1418,10 +1418,65 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 });
 
+function initializeHabitList() {
+    const habitList = document.querySelector('.task-list');
+    if (!habitList) return;
+    
+    // Clear existing content
+    habitList.innerHTML = '';
+    
+    // Set up drag and drop functionality for the habit list
+    habitList.addEventListener('dragover', e => {
+        e.preventDefault();
+        const draggingItem = document.querySelector('.task-item.dragging');
+        if (draggingItem) {
+            const siblings = [...habitList.querySelectorAll('.task-item:not(.dragging)')];
+            const nextSibling = siblings.find(sibling => {
+                const box = sibling.getBoundingClientRect();
+                return e.clientY < box.top + box.height / 2;
+            });
+
+            if (nextSibling) {
+                habitList.insertBefore(draggingItem, nextSibling);
+            } else {
+                habitList.appendChild(draggingItem);
+            }
+        }
+    });
+
+    // Load initial habits from Firebase if authenticated
+    if (isAuthenticated) {
+        db.collection('habit').get()
+            .then(snapshot => {
+                const habits = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data && data.name) {
+                        habits.push({
+                            name: data.name,
+                            monday: data.monday || false,
+                            tuesday: data.tuesday || false,
+                            wednesday: data.wednesday || false,
+                            thursday: data.thursday || false,
+                            friday: data.friday || false,
+                            saturday: data.saturday || false,
+                            sunday: data.sunday || false
+                        });
+                    }
+                });
+                updateHabitList(habits);
+            })
+            .catch(error => {
+                console.error("Error loading initial habits:", error);
+            });
+    }
+}
+
 </script>
     
 </body>
 </html>
+
 
 
 
