@@ -1348,7 +1348,7 @@ function initializeScheduler() {
     const timeBlocksContainer = document.getElementById('timeBlocks');
     timeBlocksContainer.innerHTML = '';
     
-    for (let hour = 0; hour < 24; hour++) {
+    for (let hour = 6; hour < 22; hour++) {
         const timeBlock = document.createElement('div');
         timeBlock.className = `time-block ${getTimeBlockColor(hour)}`;
         
