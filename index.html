@@ -616,7 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('User is authenticated:', user.uid);
             isAuthenticated = true;
             
-            // Only set up Firebase listeners after authentication
+            // Set up Firebase listeners
             setupFirebaseListeners();
             
             // Set up sync handlers
@@ -625,17 +625,9 @@ document.addEventListener('DOMContentLoaded', () => {
             syncHabitChanges();
         } else {
             console.log('User is not authenticated, attempting anonymous sign-in...');
-            isAuthenticated = false;
-            
-            // Attempt anonymous sign-in
             auth.signInAnonymously()
                 .catch((error) => {
                     console.error('Error signing in:', error);
-                    // If anonymous auth fails, fall back to local storage
-                    if (error.code === 'auth/admin-restricted-operation') {
-                        console.log('Falling back to local storage...');
-                        setupLocalStorageListeners();
-                    }
                 });
         }
     });
@@ -1740,32 +1732,22 @@ function deleteHabit(habitName) {
 
 // =============== Firebase Sync Functions ===============
 function syncSchedulerChanges() {
-    const timeBlocks = document.querySelectorAll('.time-block');
+    const timeBlocks = document.querySelectorAll('#timeBlocks .time-block');
     timeBlocks.forEach(block => {
         const input = block.querySelector('.time-input');
-        if (input) {  // Add null check
-            input.addEventListener('change', () => {
-                try {
-                    const hour = input.placeholder.match(/\d+/)[0];
-                    const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
-                    
-                    // Get the scheduler container and day title to determine which document to update
-                    const scheduler = block.closest('.scheduler');
-                    const dayTitle = scheduler.querySelector('.day-title');
-                    const docName = dayTitle ? 
-                        dayTitle.textContent.toLowerCase() === 'today' ? 
-                            'chunksheet' : 
-                            dayTitle.textContent.toLowerCase() : 
-                        'chunksheet';
-
-                    db.collection('chunksheet').doc(docName).update({
-                        [key]: input.value
-                    }).catch(error => {
-                        console.error('Error updating scheduler:', error);
-                    });
-                } catch (error) {
-                    console.error('Error in scheduler sync:', error);
-                }
+        if (input) {
+            input.addEventListener('input', function() {
+                const hour = this.placeholder.match(/\d+/)[0];
+                const key = `h${hour}${this.placeholder.includes('PM') ? 'pm' : 'am'}`;
+                
+                db.collection('chunksheet').doc('chunksheet').set({
+                    [key]: this.value
+                }, { merge: true }).catch(error => {
+                    console.error('Error updating scheduler:', error);
+                });
+                
+                handleXTask(this);
+                handleSplitTask(this);
             });
         }
     });
@@ -1794,20 +1776,18 @@ function syncHabitChanges() {
 
 // =============== Main Initialization ===============
 document.addEventListener('DOMContentLoaded', () => {
-    // Sign in anonymously first
-    auth.signInAnonymously()
-        .then(() => {
-            console.log('Signed in anonymously');
-            
-            // Initialize all components
-            initializeScheduler();
-            initializeBoard();
-            initializeHabitList();
-            initializeAddHabit();
-            setupDoubleClickHandlers();
-            
-            // Initialize drag and drop
-            initializeDragAndDrop();
+    // Initialize UI components first
+    initializeScheduler();
+    initializeBoard();
+    initializeHabitList();
+    initializeAddHabit();
+    setupDoubleClickHandlers();
+
+    // Handle authentication state changes
+    auth.onAuthStateChanged((user) => {
+        if (user) {
+            console.log('User is authenticated:', user.uid);
+            isAuthenticated = true;
             
             // Set up Firebase listeners
             setupFirebaseListeners();
@@ -1816,10 +1796,18 @@ document.addEventListener('DOMContentLoaded', () => {
             syncSchedulerChanges();
             syncTaskChanges();
             syncHabitChanges();
-        })
-        .catch((error) => {
-            console.error('Error signing in:', error);
-        });
+        } else {
+            console.log('User is not authenticated, attempting anonymous sign-in...');
+            auth.signInAnonymously()
+                .catch((error) => {
+                    console.error('Error signing in:', error);
+                });
+        }
+    });
+
+    // Add expand button handler
+    const expandButton = document.querySelector('.expand-button');
+    expandButton.addEventListener('click', expandSchedulers);
 });
 
 function initializeHabitList() {
@@ -1964,7 +1952,6 @@ function createDayScheduler(dayName, docName) {
     const timeBlocks = document.createElement('div');
     timeBlocks.className = 'timeBlocks';
     
-    // Create time blocks (same as original scheduler)
     for (let hour = 0; hour < 24; hour++) {
         const timeBlock = document.createElement('div');
         timeBlock.className = `time-block ${getTimeBlockColor(hour)}`;
@@ -1974,19 +1961,6 @@ function createDayScheduler(dayName, docName) {
         input.className = 'time-input';
         input.placeholder = formatTime(hour);
         
-        // Add change event listener for Firebase sync
-        input.addEventListener('change', () => {
-            const hour = input.placeholder.match(/\d+/)[0];
-            const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
-            
-            // Update Firebase with the new value
-            db.collection('chunksheet').doc(docName).set({
-                [key]: input.value
-            }, { merge: true }).catch(error => {
-                console.error('Error updating scheduler:', error);
-            });
-        });
-        
         const checkmark = document.createElement('span');
         checkmark.className = 'checkmark';
         checkmark.textContent = '✓';
@@ -1994,7 +1968,21 @@ function createDayScheduler(dayName, docName) {
         timeBlock.appendChild(input);
         timeBlock.appendChild(checkmark);
         
-        attachEventListeners(timeBlock);
+        // Add input event listener for immediate sync
+        input.addEventListener('input', function() {
+            const hour = this.placeholder.match(/\d+/)[0];
+            const key = `h${hour}${this.placeholder.includes('PM') ? 'pm' : 'am'}`;
+            
+            db.collection('chunksheet').doc(docName).set({
+                [key]: this.value
+            }, { merge: true }).catch(error => {
+                console.error('Error updating scheduler:', error);
+            });
+            
+            handleXTask(this);
+            handleSplitTask(this);
+        });
+        
         checkmark.addEventListener('click', handleRegularCheckmark);
         
         timeBlocks.appendChild(timeBlock);
@@ -2004,16 +1992,14 @@ function createDayScheduler(dayName, docName) {
     scheduler.appendChild(timeBlocks);
     
     // Set up Firebase listener for this day
-    if (isAuthenticated) {
-        db.collection('chunksheet').doc(docName)
-            .onSnapshot(doc => {
-                if (doc.exists) {
-                    updateScheduler(doc.data(), timeBlocks);
-                }
-            }, error => {
-                console.error(`${dayName} listener error:`, error);
-            });
-    }
+    db.collection('chunksheet').doc(docName)
+        .onSnapshot(doc => {
+            if (doc.exists) {
+                updateScheduler(doc.data(), timeBlocks);
+            }
+        }, error => {
+            console.error(`${dayName} listener error:`, error);
+        });
     
     return scheduler;
 }
@@ -2043,3 +2029,17 @@ function expandSchedulers() {
     
 </body>
 </html>
+
+
+
+
+ 
+
+
+ 
+
+
+
+
+
+
