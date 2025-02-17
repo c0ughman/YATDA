@@ -615,7 +615,28 @@ function syncTaskChanges() {
         });
     });
 }
-////////
+
+
+function syncXTaskChange(input) {
+    if (!input || !input.placeholder) return;
+    
+    const hourMatch = input.placeholder.match(/\d+/);
+    if (!hourMatch) return;
+    
+    const hour = hourMatch[0];
+    const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
+    
+    const value = input.value.trim().toLowerCase();
+    if (value === 'x' || value.startsWith('x ')) {
+        // Update Firebase with the X value
+        db.collection('chunksheet').doc('chunksheet').update({
+            [key]: 'x'
+        }).catch(error => {
+            console.error('Error updating X task:', error);
+        });
+    }
+}
+
 
 // =============== Scheduler Functions ===============
 function createSplitSections(timeBlock, firstPart, secondPart) {
@@ -655,17 +676,16 @@ function createSplitSections(timeBlock, firstPart, secondPart) {
         input2.disabled = true;
     }
     
+    // Handle X tasks for both sections
+    handleXTask(input1);
+    handleXTask(input2);
+    
     attachEventListeners(section1);
     attachEventListeners(section2);
     attachBackspaceHandler(input2, timeBlock);
     checkmark.addEventListener('click', () => handleSplitCheckmark(timeBlock));
-    
-    handleXTask(input1);
-    handleXTask(input2);
-
-    input2.focus();
-    input2.select();
 }
+
 
 function mergeSections(timeBlock) {
     const colorClass = timeBlock.className.match(/(morning-early|day-mid|evening|night)/)[0];
@@ -713,6 +733,7 @@ function attachEventListeners(element) {
         input.addEventListener('input', function() {
             handleXTask(this);
             handleSplitTask(this);
+            syncXTaskChange(this); // Add this line
         });
 
         input.addEventListener('focus', function() {
@@ -722,7 +743,6 @@ function attachEventListeners(element) {
         });
     }
 }
-
 function handleSplitTask(input) {
     const value = input.value;
     const timeBlock = input.closest('.time-block');
@@ -734,11 +754,14 @@ function handleSplitTask(input) {
 }
 
 function handleXTask(input) {
+    if (!input) return;
     const container = input.closest('.split-section') || input.parentElement;
-    const value = input.value.trim().toLowerCase();
+    if (!container) return;
     
+    const value = input.value.trim().toLowerCase();
     if (value === 'x' || value.startsWith('x ')) {
         container.classList.add('x-task');
+        input.value = 'x'; // Ensure consistent x display
     } else {
         container.classList.remove('x-task');
     }
@@ -1196,24 +1219,44 @@ function setupFirebaseListeners() {
 }
 
 function updateScheduler(data) {
+    if (!data) return;
     const timeBlocks = document.querySelectorAll('.time-block');
+    
     timeBlocks.forEach(block => {
         const input = block.querySelector('.time-input');
-        const hour = input.placeholder.match(/\d+/)[0];
+        if (!input || !input.placeholder) return;
+        
+        const hourMatch = input.placeholder.match(/\d+/);
+        if (!hourMatch) return;
+        
+        const hour = hourMatch[0];
         const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
         
         if (data[key]) {
+            // Set the value first
             input.value = data[key];
-            // Handle split tasks
+            
             if (data[key].includes(' / ')) {
+                // Handle split tasks
                 const [firstPart, secondPart] = data[key].split(' / ');
                 createSplitSections(block, firstPart, secondPart);
+                
+                // Apply X task styling to split sections if needed
+                const sections = block.querySelectorAll('.split-section');
+                sections.forEach(section => {
+                    const sectionInput = section.querySelector('.time-input');
+                    if (sectionInput) {
+                        handleXTask(sectionInput);
+                    }
+                });
+            } else {
+                // Handle regular tasks
+                handleXTask(input);
             }
-            // Handle X tasks
-            handleXTask(input);
         }
     });
 }
+
 
 function updateBoard(tasks) {
     const columns = document.querySelectorAll('.column');
