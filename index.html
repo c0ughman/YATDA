@@ -837,9 +837,9 @@ const columnColors = {
 
 let dragStartColor = null;
 
-// Move setupDragAndDrop out of initializeBoard
-function setupDragAndDrop(task) {
-    if (!task) return; // Add safety check
+// =============== Task Functions ===============
+function setupTaskDragAndDrop(task) {
+    if (!task) return;
 
     // Remove any existing listeners first
     const newTask = task.cloneNode(true);
@@ -854,26 +854,23 @@ function setupDragAndDrop(task) {
         newTask.classList.remove('dragging');
     });
 
-    newTask.addEventListener('dblclick', (e) => {
+    newTask.addEventListener('dblclick', () => {
         const columnIndex = newTask.closest('.column')?.classList.contains('one-thing') ? 0 :
                           newTask.closest('.column')?.classList.contains('today') ? 1 : 2;
-        if (typeof columnIndex === 'number') {
-            deleteTask(newTask.textContent, columnIndex);
-            newTask.remove();
-        }
+        deleteTask(newTask.textContent, columnIndex);
+        newTask.remove();
     });
 
     return newTask;
 }
 
-// Update initializeBoard to use the global setupDragAndDrop
 function initializeBoard() {
     const tasks = document.querySelectorAll('.board .task');
     const columns = document.querySelectorAll('.column');
     const addTaskDivs = document.querySelectorAll('.add-task');
 
     // Add new task functionality
-    addTaskDivs.forEach(addTaskDiv => {
+    addTaskDivs.forEach((addTaskDiv, columnIndex) => {
         const plusIcon = addTaskDiv.querySelector('.plus-icon');
         const input = addTaskDiv.querySelector('.add-task-input');
 
@@ -893,21 +890,14 @@ function initializeBoard() {
 
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && input.value.trim()) {
-                const newTask = document.createElement('div');
-                newTask.className = 'task';
-                newTask.draggable = true;
-                newTask.textContent = input.value;
-                
-                const columnClass = addTaskDiv.closest('.column')?.classList[1];
-                if (columnClass && columnColors[columnClass]) {
-                    newTask.style.backgroundColor = columnColors[columnClass];
-                }
-                
-                const setupTask = setupDragAndDrop(newTask);
-                
-                const tasksContainer = addTaskDiv.closest('.column')?.querySelector('.tasks');
-                if (tasksContainer) {
-                    tasksContainer.appendChild(setupTask);
+                // Add to Firebase
+                if (isAuthenticated) {
+                    db.collection('task').add({
+                        text: input.value.trim(),
+                        when: columnIndex
+                    }).catch(error => {
+                        console.error('Error adding task:', error);
+                    });
                 }
                 
                 // Reset the input
@@ -920,14 +910,14 @@ function initializeBoard() {
 
     // Setup existing tasks
     tasks.forEach(task => {
-        const setupTask = setupDragAndDrop(task);
+        const setupTask = setupTaskDragAndDrop(task);
         if (setupTask && task.parentNode) {
             task.parentNode.replaceChild(setupTask, task);
         }
     });
 
     // Setup column drop zones
-    columns.forEach(column => {
+    columns.forEach((column, columnIndex) => {
         column.addEventListener('dragover', e => {
             e.preventDefault();
             const draggingTask = document.querySelector('.dragging');
@@ -935,6 +925,25 @@ function initializeBoard() {
                 const tasksContainer = column.querySelector('.tasks');
                 if (tasksContainer) {
                     tasksContainer.appendChild(draggingTask);
+                    
+                    // Update task position in Firebase
+                    if (isAuthenticated) {
+                        db.collection('task')
+                            .where('text', '==', draggingTask.textContent)
+                            .get()
+                            .then(querySnapshot => {
+                                querySnapshot.forEach(doc => {
+                                    doc.ref.update({
+                                        when: columnIndex
+                                    }).catch(error => {
+                                        console.error('Error updating task position:', error);
+                                    });
+                                });
+                            })
+                            .catch(error => {
+                                console.error('Error finding task to update:', error);
+                            });
+                    }
                     
                     const columnClass = column.classList[1];
                     const targetColor = columnColors[columnClass];
@@ -952,268 +961,43 @@ function initializeBoard() {
     });
 }
 
-// =============== Habit Functions ===============
-function setupHabitDragAndDrop(habit) {
-    if (!habit) return;
-
-    // Remove any existing listeners first
-    const newHabit = habit.cloneNode(true);
-    habit.parentNode?.replaceChild(newHabit, habit);
-    
-    newHabit.addEventListener('dragstart', () => {
-        newHabit.classList.add('dragging');
-    });
-
-    newHabit.addEventListener('dragend', () => {
-        newHabit.classList.remove('dragging');
-    });
-
-    newHabit.addEventListener('dblclick', (e) => {
-        if (!e.target.classList.contains('checkbox')) {
-            const habitName = newHabit.querySelector('.task-name').textContent;
-            deleteHabit(habitName);
-            newHabit.remove();
+function updateBoard(tasks) {
+    const columns = document.querySelectorAll('.column');
+    columns.forEach((column, index) => {
+        const tasksContainer = column.querySelector('.tasks');
+        tasksContainer.innerHTML = '';
+        if (tasks[index]) {
+            tasks[index].forEach(taskText => {
+                const task = document.createElement('div');
+                task.className = 'task';
+                task.draggable = true;
+                task.textContent = taskText;
+                const setupTask = setupTaskDragAndDrop(task);
+                tasksContainer.appendChild(setupTask || task);
+            });
         }
     });
-
-    return newHabit;
 }
 
-function getRandomColor() {
-    const hue = Math.floor(Math.random() * 360);
-    return `hsl(${hue}, 70%, 40%)`;
-}
-
-      
-function createHabitElement(habitData) {
-    const li = document.createElement('li');
-    li.className = 'task-item';
-    li.draggable = true;
-    
-    // Create array of weekdays in order
-    const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    
-    // Generate checkboxes HTML with states from database
-    const checkboxesHtml = weekdays.map(day => {
-        const isChecked = habitData[day] ? 'checked' : '';
-        return `<input type="checkbox" class="checkbox" data-day="${day}" ${isChecked}>`;
-    }).join('');
-    
-    li.innerHTML = `
-        <span class="task-name">${habitData.name}</span>
-        <div class="checkboxes">
-            ${checkboxesHtml}
-        </div>
-        <span class="drag-handle">≡</span>
-    `;
-
-    // Add styling to checked boxes
-    li.querySelectorAll('.checkbox').forEach(checkbox => {
-        if (checkbox.checked) {
-            const color = getRandomColor();
-            checkbox.style.backgroundColor = color;
-            checkbox.style.borderColor = color;
-        }
-
-        checkbox.addEventListener('change', function() {
-            const day = this.dataset.day;
-            if (this.checked) {
-                const color = getRandomColor();
-                this.style.backgroundColor = color;
-                this.style.borderColor = color;
-                
-                // Update Firebase
-                updateHabitCheckbox(habitData.name, day, true);
-            } else {
-                this.style.backgroundColor = '';
-                this.style.borderColor = '#666';
-                
-                // Update Firebase
-                updateHabitCheckbox(habitData.name, day, false);
-            }
-        });
-    });
-
-    setupHabitDragAndDrop(li);
-    return li;
-}
-
-function updateHabitCheckbox(habitName, day, checked) {
+function deleteTask(taskText, columnIndex) {
     if (isAuthenticated) {
-        db.collection('habit')
-            .where('name', '==', habitName)
+        db.collection('task')
+            .where('text', '==', taskText)
+            .where('when', '==', columnIndex)
             .get()
             .then(querySnapshot => {
                 querySnapshot.forEach(doc => {
-                    doc.ref.update({
-                        [day]: checked
-                    }).catch(error => {
-                        console.error('Error updating habit checkbox:', error);
+                    doc.ref.delete().catch(error => {
+                        console.error('Error deleting task:', error);
                     });
                 });
             })
             .catch(error => {
-                console.error('Error finding habit to update:', error);
+                console.error('Error finding task to delete:', error);
             });
     }
 }
 
-function updateHabitList(habits) {
-    const habitList = document.querySelector('.task-list');
-    habitList.innerHTML = '';
-    habits.forEach(habit => {
-        const habitElement = createHabitElement(habit);
-        habitList.appendChild(habitElement);
-    });
-}
-
-// =============== Initialize Scheduler ===============
-function initializeScheduler() {
-    const timeBlocksContainer = document.getElementById('timeBlocks');
-    timeBlocksContainer.innerHTML = '';
-    
-    for (let hour = 0; hour < 24; hour++) {
-        const timeBlock = document.createElement('div');
-        timeBlock.className = `time-block ${getTimeBlockColor(hour)}`;
-        
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'time-input';
-        input.placeholder = formatTime(hour);
-        
-        const checkmark = document.createElement('span');
-        checkmark.className = 'checkmark';
-        checkmark.textContent = '✓';
-        
-        timeBlock.appendChild(input);
-        timeBlock.appendChild(checkmark);
-        
-        attachEventListeners(timeBlock);
-        checkmark.addEventListener('click', handleRegularCheckmark);
-        
-        timeBlocksContainer.appendChild(timeBlock);
-    }
-}
-
-// =============== Add Habit Functions ===============
-function initializeAddHabit() {
-    const addHabitDiv = document.querySelector('.add-habit');
-    const plusIcon = addHabitDiv.querySelector('.plus-icon');
-    const input = addHabitDiv.querySelector('.add-habit-input');
-
-    // Handle clicking the add habit button
-    addHabitDiv.addEventListener('click', (e) => {
-        if (e.target === addHabitDiv || e.target === plusIcon) {
-            input.classList.add('active');
-            plusIcon.style.display = 'none';
-            input.focus();
-        }
-    });
-
-    // Handle input blur (clicking away)
-    input.addEventListener('blur', () => {
-        input.classList.remove('active');
-        plusIcon.style.display = 'block';
-        input.value = '';
-    });
-
-    // Handle Enter key press
-    input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && input.value.trim()) {
-            if (isAuthenticated) {
-                // Firebase version
-                db.collection('habit').add({
-                    name: input.value.trim(),
-                    monday: false,
-                    tuesday: false,
-                    wednesday: false,
-                    thursday: false,
-                    friday: false,
-                    saturday: false,
-                    sunday: false
-                }).catch(error => {
-                    console.error('Error adding habit:', error);
-                });
-            } else {
-                // LocalStorage version
-                const habits = JSON.parse(localStorage.getItem('habits') || '[]');
-                habits.push({
-                    name: input.value.trim(),
-                    monday: false,
-                    tuesday: false,
-                    wednesday: false,
-                    thursday: false,
-                    friday: false,
-                    saturday: false,
-                    sunday: false
-                });
-                localStorage.setItem('habits', JSON.stringify(habits));
-                updateHabitList(habits.map(h => h.name));
-            }
-            
-            // Reset the input
-            input.value = '';
-            input.classList.remove('active');
-            plusIcon.style.display = 'block';
-        }
-    });
-}
-
-function setupDoubleClickHandlers() {
-    // For scheduler time blocks
-    const timeBlocks = document.querySelectorAll('.time-block');
-    timeBlocks.forEach(block => {
-        block.querySelector('.time-input').addEventListener('dblclick', (e) => {
-            e.stopPropagation();
-            e.target.value = '';
-            if (block.classList.contains('split')) {
-                mergeSections(block);
-            }
-            block.classList.remove('active');
-            block.classList.remove('x-task');
-            e.target.disabled = false;
-        });
-    });
-
-    // For task list items
-    const taskItems = document.querySelectorAll('.task-item');
-    taskItems.forEach(item => {
-        item.addEventListener('dblclick', (e) => {
-            if (!e.target.classList.contains('checkbox')) {
-                const habitName = item.querySelector('.task-name').textContent;
-                if (isAuthenticated) {
-                    deleteHabit(habitName);
-                } else {
-                    const habits = JSON.parse(localStorage.getItem('habits') || '[]');
-                    const filteredHabits = habits.filter(habit => habit.name !== habitName);
-                    localStorage.setItem('habits', JSON.stringify(filteredHabits));
-                    updateHabitList(filteredHabits.map(h => h.name));
-                }
-                item.remove();
-            }
-        });
-    });
-
-    // For board tasks
-    const boardTasks = document.querySelectorAll('.board .task');
-    boardTasks.forEach(task => {
-        task.addEventListener('dblclick', (e) => {
-            const columnIndex = task.closest('.column').classList.contains('one-thing') ? 0 :
-                              task.closest('.column').classList.contains('today') ? 1 : 2;
-            if (isAuthenticated) {
-                deleteTask(task.textContent, columnIndex);
-            } else {
-                const tasks = JSON.parse(localStorage.getItem('tasks') || '{"0":[],"1":[],"2":[]}');
-                tasks[columnIndex] = tasks[columnIndex].filter(t => t !== task.textContent);
-                localStorage.setItem('tasks', JSON.stringify(tasks));
-                updateBoard(tasks);
-            }
-            task.remove();
-        });
-    });
-}
-
-      
 // =============== Firebase Operations ===============
 function setupFirebaseListeners() {
     db.collection('chunksheet').doc('chunksheet')
@@ -1303,40 +1087,113 @@ function updateScheduler(data) {
     });
 }
 
-
-function updateBoard(tasks) {
-    const columns = document.querySelectorAll('.column');
-    columns.forEach((column, index) => {
-        const tasksContainer = column.querySelector('.tasks');
-        tasksContainer.innerHTML = '';
-        if (tasks[index]) {
-            tasks[index].forEach(taskText => {
-                const task = document.createElement('div');
-                task.className = 'task';
-                task.draggable = true;
-                task.textContent = taskText;
-                setupDragAndDrop(task);
-                tasksContainer.appendChild(task);
-            });
-        }
+function updateHabitList(habits) {
+    const habitList = document.querySelector('.task-list');
+    habitList.innerHTML = '';
+    habits.forEach(habit => {
+        const habitElement = createHabitElement(habit);
+        habitList.appendChild(habitElement);
     });
 }
 
-function deleteTask(taskText, columnIndex) {
-    db.collection('task')
-        .where('text', '==', taskText)
-        .where('when', '==', columnIndex)
-        .get()
-        .then(querySnapshot => {
-            querySnapshot.forEach(doc => {
-                doc.ref.delete().catch(error => {
-                    console.error('Error deleting task:', error);
-                });
-            });
-        })
-        .catch(error => {
-            console.error('Error finding task to delete:', error);
+// =============== Habit Functions ===============
+function setupHabitDragAndDrop(habit) {
+    if (!habit) return;
+
+    // Remove any existing listeners first
+    const newHabit = habit.cloneNode(true);
+    habit.parentNode?.replaceChild(newHabit, habit);
+    
+    newHabit.addEventListener('dragstart', () => {
+        newHabit.classList.add('dragging');
+    });
+
+    newHabit.addEventListener('dragend', () => {
+        newHabit.classList.remove('dragging');
+    });
+
+    newHabit.addEventListener('dblclick', (e) => {
+        if (!e.target.classList.contains('checkbox')) {
+            const habitName = newHabit.querySelector('.task-name').textContent;
+            deleteHabit(habitName);
+            newHabit.remove();
+        }
+    });
+
+    return newHabit;
+}
+
+function createHabitElement(habitData) {
+    const li = document.createElement('li');
+    li.className = 'task-item';
+    li.draggable = true;
+    
+    // Create array of weekdays in order
+    const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    
+    // Generate checkboxes HTML with states from database
+    const checkboxesHtml = weekdays.map(day => {
+        const isChecked = habitData[day] ? 'checked' : '';
+        return `<input type="checkbox" class="checkbox" data-day="${day}" ${isChecked}>`;
+    }).join('');
+    
+    li.innerHTML = `
+        <span class="task-name">${habitData.name}</span>
+        <div class="checkboxes">
+            ${checkboxesHtml}
+        </div>
+        <span class="drag-handle">≡</span>
+    `;
+
+    // Add styling to checked boxes
+    li.querySelectorAll('.checkbox').forEach(checkbox => {
+        if (checkbox.checked) {
+            const color = getRandomColor();
+            checkbox.style.backgroundColor = color;
+            checkbox.style.borderColor = color;
+        }
+
+        checkbox.addEventListener('change', function() {
+            const day = this.dataset.day;
+            if (this.checked) {
+                const color = getRandomColor();
+                this.style.backgroundColor = color;
+                this.style.borderColor = color;
+                
+                // Update Firebase
+                updateHabitCheckbox(habitData.name, day, true);
+            } else {
+                this.style.backgroundColor = '';
+                this.style.borderColor = '#666';
+                
+                // Update Firebase
+                updateHabitCheckbox(habitData.name, day, false);
+            }
         });
+    });
+
+    setupHabitDragAndDrop(li);
+    return li;
+}
+
+function updateHabitCheckbox(habitName, day, checked) {
+    if (isAuthenticated) {
+        db.collection('habit')
+            .where('name', '==', habitName)
+            .get()
+            .then(querySnapshot => {
+                querySnapshot.forEach(doc => {
+                    doc.ref.update({
+                        [day]: checked
+                    }).catch(error => {
+                        console.error('Error updating habit checkbox:', error);
+                    });
+                });
+            })
+            .catch(error => {
+                console.error('Error finding habit to update:', error);
+            });
+    }
 }
 
 function deleteHabit(habitName) {
@@ -1482,7 +1339,6 @@ function initializeHabitList() {
     
 </body>
 </html>
-
 
 
 
