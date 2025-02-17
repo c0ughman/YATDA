@@ -873,7 +873,7 @@ function initializeBoard() {
     const addTaskDivs = document.querySelectorAll('.add-task');
 
     // Add new task functionality
-    addTaskDivs.forEach(addTaskDiv => {
+    addTaskDivs.forEach((addTaskDiv, columnIndex) => {
         const plusIcon = addTaskDiv.querySelector('.plus-icon');
         const input = addTaskDiv.querySelector('.add-task-input');
 
@@ -893,24 +893,15 @@ function initializeBoard() {
 
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && input.value.trim()) {
-                const newTask = document.createElement('div');
-                newTask.className = 'task';
-                newTask.draggable = true;
-                newTask.textContent = input.value;
-                
-                const columnClass = addTaskDiv.closest('.column')?.classList[1];
-                if (columnClass && columnColors[columnClass]) {
-                    newTask.style.backgroundColor = columnColors[columnClass];
+                if (isAuthenticated) {
+                    db.collection('task').add({
+                        text: input.value.trim(),
+                        when: columnIndex
+                    }).catch(error => {
+                        console.error('Error adding task:', error);
+                    });
                 }
                 
-                const setupTask = setupDragAndDrop(newTask);
-                
-                const tasksContainer = addTaskDiv.closest('.column')?.querySelector('.tasks');
-                if (tasksContainer) {
-                    tasksContainer.appendChild(setupTask);
-                }
-                
-                // Reset the input
                 input.value = '';
                 input.classList.remove('active');
                 plusIcon.style.display = 'block';
@@ -920,36 +911,59 @@ function initializeBoard() {
 
     // Setup existing tasks
     tasks.forEach(task => {
-        const setupTask = setupDragAndDrop(task);
-        if (setupTask && task.parentNode) {
-            task.parentNode.replaceChild(setupTask, task);
-        }
+        setupTaskDragAndDrop(task);
     });
 
     // Setup column drop zones
-    columns.forEach(column => {
+    columns.forEach((column, columnIndex) => {
         column.addEventListener('dragover', e => {
             e.preventDefault();
-            const draggingTask = document.querySelector('.dragging');
+            const draggingTask = document.querySelector('.board .task.dragging');
             if (draggingTask) {
                 const tasksContainer = column.querySelector('.tasks');
                 if (tasksContainer) {
                     tasksContainer.appendChild(draggingTask);
                     
-                    const columnClass = column.classList[1];
-                    const targetColor = columnColors[columnClass];
-                    
-                    if (dragStartColor && targetColor) {
-                        draggingTask.style.transition = 'none';
-                        draggingTask.style.backgroundColor = dragStartColor;
-                        draggingTask.offsetHeight; // Force reflow
-                        draggingTask.style.transition = 'background-color 0.5s ease';
-                        draggingTask.style.backgroundColor = targetColor;
+                    // Update task position in database
+                    if (isAuthenticated) {
+                        db.collection('task')
+                            .where('text', '==', draggingTask.textContent)
+                            .get()
+                            .then(querySnapshot => {
+                                querySnapshot.forEach(doc => {
+                                    doc.ref.update({
+                                        when: columnIndex
+                                    }).catch(error => {
+                                        console.error('Error updating task position:', error);
+                                    });
+                                });
+                            })
+                            .catch(error => {
+                                console.error('Error finding task to update:', error);
+                            });
                     }
                 }
             }
         });
     });
+}
+
+function setupTaskDragAndDrop(task) {
+    if (!task) return;
+
+    // Remove any existing listeners first
+    const newTask = task.cloneNode(true);
+    task.parentNode?.replaceChild(newTask, task);
+    
+    newTask.addEventListener('dragstart', () => {
+        newTask.classList.add('dragging');
+    });
+
+    newTask.addEventListener('dragend', () => {
+        newTask.classList.remove('dragging');
+    });
+
+    return newTask;
 }
 
 // =============== Habit Functions ===============
@@ -1315,7 +1329,7 @@ function updateBoard(tasks) {
                 task.className = 'task';
                 task.draggable = true;
                 task.textContent = taskText;
-                setupDragAndDrop(task);
+                setupTaskDragAndDrop(task);
                 tasksContainer.appendChild(task);
             });
         }
@@ -1482,6 +1496,7 @@ function initializeHabitList() {
     
 </body>
 </html>
+
 
 
 
