@@ -1224,52 +1224,42 @@ function setupHabitDragAndDrop(habit) {
     });
     
     habit.addEventListener('dragstart', (e) => {
-        // Only allow dragging by the drag handle or task name
-        if (!e.target.classList.contains('drag-handle') && 
-            !e.target.classList.contains('task-name')) {
-            e.preventDefault();
-            return;
-        }
+        // Store the habit element being dragged
         habit.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
     });
 
-    habit.addEventListener('dragend', async () => {
+    habit.addEventListener('dragend', () => {
         habit.classList.remove('dragging');
         
-        if (!isAuthenticated) return;
-
-        try {
-            // Get all habits in their current order
-            const habitList = habit.closest('.task-list');
-            const habits = [...habitList.querySelectorAll('.task-item')];
-            
-            // Create a batch
+        // Get updated order of habits
+        const habitList = habit.closest('.task-list');
+        const habits = [...habitList.querySelectorAll('.task-item')];
+        
+        // Update order in Firebase
+        if (isAuthenticated) {
             const batch = db.batch();
             
-            // Get all habit documents first
-            const snapshot = await db.collection('habit').get();
-            const habitDocs = new Map();
-            
-            // Create a map of habit names to their document references
-            snapshot.forEach(doc => {
-                habitDocs.set(doc.data().name, doc.ref);
-            });
-            
-            // Update each habit's order
-            habits.forEach((habitElement, index) => {
-                const habitName = habitElement.querySelector('.task-name').textContent;
-                const docRef = habitDocs.get(habitName);
-                
-                if (docRef) {
-                    batch.update(docRef, { order: index });
-                }
-            });
-            
-            // Commit all updates
-            await batch.commit();
-            
-        } catch (error) {
-            console.error('Error updating habit order:', error);
+            // Get all habit documents
+            db.collection('habit').get()
+                .then(snapshot => {
+                    const habitDocs = new Map();
+                    snapshot.forEach(doc => {
+                        habitDocs.set(doc.data().name, doc.ref);
+                    });
+                    
+                    // Update each habit's order
+                    habits.forEach((habitElement, index) => {
+                        const habitName = habitElement.querySelector('.task-name').textContent;
+                        const docRef = habitDocs.get(habitName);
+                        if (docRef) {
+                            batch.update(docRef, { order: index });
+                        }
+                    });
+                    
+                    return batch.commit();
+                })
+                .catch(error => console.error('Error updating habit order:', error));
         }
     });
 }
@@ -1818,7 +1808,8 @@ function setupColumnDragHandlers(columns) {
 }
 
 // Add new setupHabitListContainer function
-function setupHabitListContainer(habitList) {
+function setupHabitListContainer() {
+    const habitList = document.querySelector('.task-list');
     if (!habitList) return;
 
     habitList.addEventListener('dragover', (e) => {
@@ -1826,6 +1817,7 @@ function setupHabitListContainer(habitList) {
         const draggingHabit = document.querySelector('.task-item.dragging');
         if (!draggingHabit) return;
 
+        // Get the closest habit element based on mouse position
         const afterElement = getDragAfterElement(habitList, e.clientY);
         if (afterElement) {
             habitList.insertBefore(draggingHabit, afterElement);
@@ -1833,21 +1825,25 @@ function setupHabitListContainer(habitList) {
             habitList.appendChild(draggingHabit);
         }
     });
+
+    habitList.addEventListener('drop', (e) => {
+        e.preventDefault();
+    });
 }
 
 function getDragAfterElement(container, y) {
-    const draggableElements = [...container.querySelectorAll('.task-item:not(.dragging)')]
+    const draggableElements = [...container.querySelectorAll('.task-item:not(.dragging)')];
     
     return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect()
-        const offset = y - box.top - box.height / 2
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
         
         if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child }
+            return { offset: offset, element: child };
         } else {
-            return closest
+            return closest;
         }
-    }, { offset: Number.NEGATIVE_INFINITY }).element
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
 // Add new initializeDragAndDrop function
@@ -1864,7 +1860,7 @@ function initializeDragAndDrop() {
     const habits = document.querySelectorAll('.task-item');
     
     habits.forEach(habit => setupHabitDragAndDrop(habit));
-    setupHabitListContainer(habitList);
+    setupHabitListContainer();
 }
 
 </script>
@@ -1876,10 +1872,6 @@ function initializeDragAndDrop() {
 
 
  
-
-
- 
-
 
 
 
