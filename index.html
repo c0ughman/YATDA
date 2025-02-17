@@ -441,6 +441,54 @@
                 margin-left: auto;  /* Push handle to the right */
             }
         }
+
+        .scheduler-container {
+            display: flex;
+            gap: 15px;
+            overflow-x: auto;
+            padding-bottom: 15px;
+        }
+
+        .scheduler {
+            flex: 0 0 27%;  /* Match the original width */
+            position: relative;
+        }
+
+        .expand-button {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background-color: #3a3a3a;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .expand-button:hover {
+            background-color: #4a4a4a;
+        }
+
+        .day-title {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        /* Update the media query for mobile */
+        @media screen and (max-width: 768px) {
+            .scheduler-container {
+                flex-direction: column;
+            }
+            
+            .scheduler {
+                flex: 1;
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -453,8 +501,12 @@
     <div class="main-container">
 
         <!-- Scheduler Column -->
-        <div class="scheduler">
-            <div id="timeBlocks"></div>
+        <div class="scheduler-container">
+            <div class="scheduler">
+                <div class="day-title">Today</div>
+                <div id="timeBlocks"></div>
+                <button class="expand-button">+</button>
+            </div>
         </div>
 
 
@@ -527,7 +579,49 @@ const auth = firebase.auth();
 // Track authentication state
 let isAuthenticated = false;
 
+// Main initialization
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize UI components first
+    initializeScheduler();
+    initializeBoard();
+    initializeHabitList();
+    initializeAddHabit();
+    setupDoubleClickHandlers();
 
+    // Handle authentication state changes
+    auth.onAuthStateChanged((user) => {
+        if (user) {
+            console.log('User is authenticated:', user.uid);
+            isAuthenticated = true;
+            
+            // Only set up Firebase listeners after authentication
+            setupFirebaseListeners();
+            
+            // Set up sync handlers
+            syncSchedulerChanges();
+            syncTaskChanges();
+            syncHabitChanges();
+        } else {
+            console.log('User is not authenticated, attempting anonymous sign-in...');
+            isAuthenticated = false;
+            
+            // Attempt anonymous sign-in
+            auth.signInAnonymously()
+                .catch((error) => {
+                    console.error('Error signing in:', error);
+                    // If anonymous auth fails, fall back to local storage
+                    if (error.code === 'auth/admin-restricted-operation') {
+                        console.log('Falling back to local storage...');
+                        setupLocalStorageListeners();
+                    }
+                });
+        }
+    });
+
+    // Add expand button handler
+    const expandButton = document.querySelector('.expand-button');
+    expandButton.addEventListener('click', expandSchedulers);
+});
 
 // Add fallback local storage functions
 function setupLocalStorageListeners() {
@@ -1009,41 +1103,32 @@ function initializeDragAndDrop() {
 
 // Update Firebase listeners to reinitialize drag and drop
 function setupFirebaseListeners() {
-    // Chunksheet listener
-    db.collection('chunksheet').doc('chunksheet')
-        .onSnapshot(doc => {
-            if (doc.exists) {
-                updateScheduler(doc.data());
+    // Existing task listener
+    db.collection('task').onSnapshot(snapshot => {
+        const tasks = { 0: [], 1: [], 2: [] };
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data && typeof data.when === 'number' && data.when >= 0 && data.when <= 2) {
+                tasks[data.when].push(data.text);
             }
-        }, error => {
-            console.error("Chunksheet listener error:", error);
         });
+        updateBoard(tasks);
+        // Reinitialize drag and drop after updating board
+        initializeDragAndDrop();
+    }, error => {
+        console.error("Task listener error:", error);
+    });
 
-    // Task listener
-    db.collection('task')
-        .onSnapshot(snapshot => {
-            const tasks = { 0: [], 1: [], 2: [] };
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                if (data && typeof data.when === 'number' && data.when >= 0 && data.when <= 2) {
-                    tasks[data.when].push(data.text);
-                }
-            });
-            updateBoard(tasks);
-        }, error => {
-            console.error("Task listener error:", error);
-        });
-
-    // Single habit listener
+    // Update the habit listener to use a single listener
     const unsubscribeHabits = db.collection('habit')
         .orderBy('order')
         .onSnapshot(snapshot => {
             const habits = [];
-            snapshot.docs.forEach(doc => {
-                const data = doc.data();
+            snapshot.docChanges().forEach(change => {
+                const data = change.doc.data();
                 if (data && data.name) {
                     habits.push({
-                        id: doc.id,
+                        id: change.doc.id,
                         name: data.name,
                         monday: data.monday || false,
                         tuesday: data.tuesday || false,
@@ -1063,6 +1148,7 @@ function setupFirebaseListeners() {
             console.error("Habit listener error:", error);
         });
 }
+
 // Update initializeBoard to use the global setupDragAndDrop
 function initializeBoard() {
     const tasks = document.querySelectorAll('.board .task');
@@ -1348,7 +1434,7 @@ function initializeScheduler() {
     const timeBlocksContainer = document.getElementById('timeBlocks');
     timeBlocksContainer.innerHTML = '';
     
-    for (let hour = 6; hour < 22; hour++) {
+    for (let hour = 0; hour < 24; hour++) {
         const timeBlock = document.createElement('div');
         timeBlock.className = `time-block ${getTimeBlockColor(hour)}`;
         
@@ -1538,9 +1624,9 @@ function setupFirebaseListeners() {
         });
 }
 
-function updateScheduler(data) {
+function updateScheduler(data, target = document.getElementById('timeBlocks')) {
     if (!data) return;
-    const timeBlocks = document.querySelectorAll('.time-block');
+    const timeBlocks = target.querySelectorAll('.time-block');
     
     timeBlocks.forEach(block => {
         const input = block.querySelector('.time-input');
@@ -1672,37 +1758,34 @@ function syncHabitChanges() {
     });
 }
 
+// =============== Main Initialization ===============
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize UI components first
-    initializeScheduler();
-    initializeBoard();
-    initializeHabitList();
-    initializeAddHabit();
-    setupDoubleClickHandlers();
-
-    // Handle authentication state changes
-    auth.onAuthStateChanged((user) => {
-        if (user) {
-            console.log('User is authenticated:', user.uid);
-            isAuthenticated = true;
+    // Sign in anonymously first
+    auth.signInAnonymously()
+        .then(() => {
+            console.log('Signed in anonymously');
             
-            // Only set up Firebase listeners once after authentication
+            // Initialize all components
+            initializeScheduler();
+            initializeBoard();
+            initializeHabitList();
+            initializeAddHabit();
+            setupDoubleClickHandlers();
+            
+            // Initialize drag and drop
+            initializeDragAndDrop();
+            
+            // Set up Firebase listeners
             setupFirebaseListeners();
-        } else {
-            console.log('User is not authenticated, attempting anonymous sign-in...');
-            isAuthenticated = false;
             
-            // Attempt anonymous sign-in
-            auth.signInAnonymously()
-                .catch((error) => {
-                    console.error('Error signing in:', error);
-                    if (error.code === 'auth/admin-restricted-operation') {
-                        console.log('Falling back to local storage...');
-                        setupLocalStorageListeners();
-                    }
-                });
-        }
-    });
+            // Set up sync handlers
+            syncSchedulerChanges();
+            syncTaskChanges();
+            syncHabitChanges();
+        })
+        .catch((error) => {
+            console.error('Error signing in:', error);
+        });
 });
 
 function initializeHabitList() {
@@ -1836,6 +1919,79 @@ function initializeDragAndDrop() {
     setupHabitListContainer();
 }
 
+function createDayScheduler(dayName, docName) {
+    const scheduler = document.createElement('div');
+    scheduler.className = 'scheduler';
+    
+    const title = document.createElement('div');
+    title.className = 'day-title';
+    title.textContent = dayName;
+    
+    const timeBlocks = document.createElement('div');
+    timeBlocks.className = 'timeBlocks';
+    
+    // Create time blocks (same as original scheduler)
+    for (let hour = 0; hour < 24; hour++) {
+        const timeBlock = document.createElement('div');
+        timeBlock.className = `time-block ${getTimeBlockColor(hour)}`;
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'time-input';
+        input.placeholder = formatTime(hour);
+        
+        const checkmark = document.createElement('span');
+        checkmark.className = 'checkmark';
+        checkmark.textContent = '✓';
+        
+        timeBlock.appendChild(input);
+        timeBlock.appendChild(checkmark);
+        
+        attachEventListeners(timeBlock);
+        checkmark.addEventListener('click', handleRegularCheckmark);
+        
+        timeBlocks.appendChild(timeBlock);
+    }
+    
+    scheduler.appendChild(title);
+    scheduler.appendChild(timeBlocks);
+    
+    // Set up Firebase listener for this day
+    if (isAuthenticated) {
+        db.collection('chunksheet').doc(docName)
+            .onSnapshot(doc => {
+                if (doc.exists) {
+                    updateScheduler(doc.data(), timeBlocks);
+                }
+            }, error => {
+                console.error(`${dayName} listener error:`, error);
+            });
+    }
+    
+    return scheduler;
+}
+
+function expandSchedulers() {
+    const container = document.querySelector('.scheduler-container');
+    const expandButton = document.querySelector('.expand-button');
+    
+    const days = [
+        { name: 'Tuesday', doc: 'tuesday' },
+        { name: 'Wednesday', doc: 'wednesday' },
+        { name: 'Thursday', doc: 'thursday' },
+        { name: 'Friday', doc: 'friday' },
+        { name: 'Saturday', doc: 'saturday' },
+        { name: 'Sunday', doc: 'sunday' }
+    ];
+    
+    days.forEach(day => {
+        const dayScheduler = createDayScheduler(day.name, day.doc);
+        container.appendChild(dayScheduler);
+    });
+    
+    expandButton.remove();  // Remove the expand button after expanding
+}
+
 </script>
     
 </body>
@@ -1848,8 +2004,6 @@ function initializeDragAndDrop() {
 
 
  
-
-
 
 
 
