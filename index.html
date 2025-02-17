@@ -979,30 +979,51 @@ function setupHabitDragAndDrop(habit) {
     return newHabit;
 }
 
-function createHabitElement(habitName) {
+function createHabitElement(habitData) {
     const li = document.createElement('li');
     li.className = 'task-item';
     li.draggable = true;
     
-    const checkboxesHtml = Array(7).fill('<input type="checkbox" class="checkbox">').join('');
+    // Create array of weekdays in order
+    const weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    
+    // Generate checkboxes HTML with states from database
+    const checkboxesHtml = weekdays.map(day => {
+        const isChecked = habitData[day] ? 'checked' : '';
+        return `<input type="checkbox" class="checkbox" data-day="${day}" ${isChecked}>`;
+    }).join('');
     
     li.innerHTML = `
-        <span class="task-name">${habitName}</span>
+        <span class="task-name">${habitData.name}</span>
         <div class="checkboxes">
             ${checkboxesHtml}
         </div>
         <span class="drag-handle">≡</span>
     `;
 
+    // Add styling to checked boxes
     li.querySelectorAll('.checkbox').forEach(checkbox => {
+        if (checkbox.checked) {
+            const color = getRandomColor();
+            checkbox.style.backgroundColor = color;
+            checkbox.style.borderColor = color;
+        }
+
         checkbox.addEventListener('change', function() {
+            const day = this.dataset.day;
             if (this.checked) {
                 const color = getRandomColor();
                 this.style.backgroundColor = color;
                 this.style.borderColor = color;
+                
+                // Update Firebase
+                updateHabitCheckbox(habitData.name, day, true);
             } else {
                 this.style.backgroundColor = '';
                 this.style.borderColor = '#666';
+                
+                // Update Firebase
+                updateHabitCheckbox(habitData.name, day, false);
             }
         });
     });
@@ -1011,27 +1032,24 @@ function createHabitElement(habitName) {
     return li;
 }
 
-function initializeHabitList() {
-    const habitList = document.querySelector('.task-list');
-    habitList.innerHTML = '';
-    
-    habitList.addEventListener('dragover', e => {
-        e.preventDefault();
-        const draggingItem = document.querySelector('.task-item.dragging');
-        if (draggingItem) {
-            const siblings = [...habitList.querySelectorAll('.task-item:not(.dragging)')];
-            const nextSibling = siblings.find(sibling => {
-                const box = sibling.getBoundingClientRect();
-                return e.clientY < box.top + box.height / 2;
+function updateHabitCheckbox(habitName, day, checked) {
+    if (isAuthenticated) {
+        db.collection('habit')
+            .where('name', '==', habitName)
+            .get()
+            .then(querySnapshot => {
+                querySnapshot.forEach(doc => {
+                    doc.ref.update({
+                        [day]: checked
+                    }).catch(error => {
+                        console.error('Error updating habit checkbox:', error);
+                    });
+                });
+            })
+            .catch(error => {
+                console.error('Error finding habit to update:', error);
             });
-
-            if (nextSibling) {
-                habitList.insertBefore(draggingItem, nextSibling);
-            } else {
-                habitList.appendChild(draggingItem);
-            }
-        }
-    });
+    }
 }
 
 function updateHabitList(habits) {
@@ -1221,7 +1239,17 @@ function setupFirebaseListeners() {
             snapshot.forEach(doc => {
                 const data = doc.data();
                 if (data && data.name) {
-                    habits.push(data.name);
+                    // Include all habit data, not just the name
+                    habits.push({
+                        name: data.name,
+                        monday: data.monday || false,
+                        tuesday: data.tuesday || false,
+                        wednesday: data.wednesday || false,
+                        thursday: data.thursday || false,
+                        friday: data.friday || false,
+                        saturday: data.saturday || false,
+                        sunday: data.sunday || false
+                    });
                 }
             });
             updateHabitList(habits);
@@ -1394,5 +1422,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
 </body>
 </html>
+
+
 
 
