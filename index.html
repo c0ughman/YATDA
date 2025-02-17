@@ -837,33 +837,265 @@ const columnColors = {
 
 let dragStartColor = null;
 
-// Move setupDragAndDrop out of initializeBoard
-function setupDragAndDrop(task) {
-    if (!task) return; // Add safety check
+// Firebase-aware drag and drop setup
+function setupDragAndDrop(element, type) {
+    if (!element) return;
 
-    // Remove any existing listeners first
-    const newTask = task.cloneNode(true);
-    task.parentNode?.replaceChild(newTask, task);
+    // Remove existing listeners
+    const newElement = element.cloneNode(true);
+    element.parentNode?.replaceChild(newElement, element);
     
-    newTask.addEventListener('dragstart', (e) => {
-        dragStartColor = window.getComputedStyle(newTask).backgroundColor;
-        newTask.classList.add('dragging');
-    });
-
-    newTask.addEventListener('dragend', () => {
-        newTask.classList.remove('dragging');
-    });
-
-    newTask.addEventListener('dblclick', (e) => {
-        const columnIndex = newTask.closest('.column')?.classList.contains('one-thing') ? 0 :
-                          newTask.closest('.column')?.classList.contains('today') ? 1 : 2;
-        if (typeof columnIndex === 'number') {
-            deleteTask(newTask.textContent, columnIndex);
-            newTask.remove();
+    // Add new drag listeners
+    newElement.addEventListener('dragstart', (e) => {
+        newElement.classList.add('dragging');
+        if (type === 'task') {
+            e.dataTransfer.setData('text/plain', newElement.textContent);
+            dragStartColor = window.getComputedStyle(newElement).backgroundColor;
         }
     });
 
-    return newTask;
+    newElement.addEventListener('dragend', (e) => {
+        newElement.classList.remove('dragging');
+        if (type === 'habit') {
+            // Update habit order in Firebase
+            const habitList = newElement.closest('.task-list');
+            const habits = [...habitList.querySelectorAll('.task-item')];
+            const habitOrder = habits.map(h => h.querySelector('.task-name').textContent);
+            
+            updateHabitOrderInFirebase(habitOrder);
+        }
+    });
+
+    // Add double-click deletion
+    newElement.addEventListener('dblclick', (e) => {
+        if (type === 'task') {
+            const columnIndex = getColumnIndex(newElement);
+            if (typeof columnIndex === 'number') {
+                deleteTaskFromFirebase(newElement.textContent, columnIndex);
+                newElement.remove();
+            }
+        } else if (type === 'habit' && !e.target.classList.contains('checkbox')) {
+            const habitName = newElement.querySelector('.task-name').textContent;
+            deleteHabitFromFirebase(habitName);
+            newElement.remove();
+        }
+    });
+
+    return newElement;
+}
+
+function setupDropZones() {
+    // Setup board columns
+    const columns = document.querySelectorAll('.column');
+    columns.forEach((column, columnIndex) => {
+        column.addEventListener('dragover', e => {
+            e.preventDefault();
+            const draggingTask = document.querySelector('.board .task.dragging');
+            if (!draggingTask) return;
+
+            const tasksContainer = column.querySelector('.tasks');
+            if (!tasksContainer) return;
+
+            tasksContainer.appendChild(draggingTask);
+            updateTaskColumnInFirebase(draggingTask.textContent, columnIndex);
+            
+            // Update task color
+            const columnClass = column.classList[1];
+            const targetColor = columnColors[columnClass];
+            updateTaskColor(draggingTask, targetColor);
+        });
+    });
+
+    // Setup habit list
+    const habitList = document.querySelector('.task-list');
+    if (habitList) {
+        habitList.addEventListener('dragover', e => {
+            e.preventDefault();
+            const draggingItem = document.querySelector('.task-item.dragging');
+            if (!draggingItem) return;
+
+            const siblings = [...habitList.querySelectorAll('.task-item:not(.dragging)')];
+            const nextSibling = findDropPosition(e.clientY, siblings);
+            
+            if (nextSibling) {
+                habitList.insertBefore(draggingItem, nextSibling);
+            } else {
+                habitList.appendChild(draggingItem);
+            }
+        });
+    }
+}
+
+// Firebase update functions
+function updateTaskColumnInFirebase(taskText, columnIndex) {
+    if (!isAuthenticated) return;
+
+    db.collection('task')
+        .where('text', '==', taskText)
+        .get()
+        .then(querySnapshot => {
+            querySnapshot.forEach(doc => {
+                doc.ref.update({
+                    when: columnIndex
+                }).catch(error => {
+                    console.error('Error updating task position:', error);
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Error finding task to update:', error);
+        });
+}
+
+
+function updateHabitOrderInFirebase(habitOrder) {
+    if (!isAuthenticated) return;
+
+    const batch = db.batch();
+    
+    db.collection('habit').get()
+        .then(snapshot => {
+            const habitDocs = new Map();
+            snapshot.forEach(doc => {
+                habitDocs.set(doc.data().name, doc.ref);
+            });
+            
+            habitOrder.forEach((habitName, index) => {
+                const habitRef = habitDocs.get(habitName);
+                if (habitRef) {
+                    batch.update(habitRef, { order: index });
+                }
+            });
+            
+            return batch.commit();
+        })
+        .catch(error => {
+            console.error('Error updating habit order:', error);
+        });
+}
+
+function deleteTaskFromFirebase(taskText, columnIndex) {
+    if (!isAuthenticated) return;
+
+    db.collection('task')
+        .where('text', '==', taskText)
+        .where('when', '==', columnIndex)
+        .get()
+        .then(querySnapshot => {
+            querySnapshot.forEach(doc => {
+                doc.ref.delete().catch(error => {
+                    console.error('Error deleting task:', error);
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Error finding task to delete:', error);
+        });
+}
+
+function deleteHabitFromFirebase(habitName) {
+    if (!isAuthenticated) return;
+
+    db.collection('habit')
+        .where('name', '==', habitName)
+        .get()
+        .then(querySnapshot => {
+            querySnapshot.forEach(doc => {
+                doc.ref.delete().catch(error => {
+                    console.error('Error deleting habit:', error);
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Error finding habit to delete:', error);
+        });
+}
+
+// Helper functions
+function getColumnIndex(taskElement) {
+    const column = taskElement.closest('.column');
+    if (!column) return null;
+    return column.classList.contains('one-thing') ? 0 :
+           column.classList.contains('today') ? 1 : 2;
+}
+
+function updateTaskColor(taskElement, targetColor) {
+    if (dragStartColor) {
+        taskElement.style.transition = 'none';
+        taskElement.style.backgroundColor = dragStartColor;
+        taskElement.offsetHeight; // Force reflow
+        taskElement.style.transition = 'background-color 0.5s ease';
+        taskElement.style.backgroundColor = targetColor;
+    }
+}
+
+function findDropPosition(mouseY, siblings) {
+    return siblings.find(sibling => {
+        const box = sibling.getBoundingClientRect();
+        return mouseY < box.top + box.height / 2;
+    });
+}
+
+// Initialize drag and drop
+function initializeDragAndDrop() {
+    // Setup all draggable elements
+    document.querySelectorAll('.board .task').forEach(task => {
+        setupDragAndDrop(task, 'task');
+    });
+    
+    document.querySelectorAll('.task-item').forEach(habit => {
+        setupDragAndDrop(habit, 'habit');
+    });
+    
+    // Setup drop zones
+    setupDropZones();
+}
+
+// Update Firebase listeners to reinitialize drag and drop
+function setupFirebaseListeners() {
+    // Existing task listener
+    db.collection('task').onSnapshot(snapshot => {
+        const tasks = { 0: [], 1: [], 2: [] };
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data && typeof data.when === 'number' && data.when >= 0 && data.when <= 2) {
+                tasks[data.when].push(data.text);
+            }
+        });
+        updateBoard(tasks);
+        // Reinitialize drag and drop after updating board
+        initializeDragAndDrop();
+    }, error => {
+        console.error("Task listener error:", error);
+    });
+
+    // Existing habit listener
+    db.collection('habit').onSnapshot(snapshot => {
+        const habits = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data && data.name) {
+                habits.push({
+                    name: data.name,
+                    monday: data.monday || false,
+                    tuesday: data.tuesday || false,
+                    wednesday: data.wednesday || false,
+                    thursday: data.thursday || false,
+                    friday: data.friday || false,
+                    saturday: data.saturday || false,
+                    sunday: data.sunday || false,
+                    order: data.order || 0
+                });
+            }
+        });
+        // Sort habits by order before updating
+        habits.sort((a, b) => (a.order || 0) - (b.order || 0));
+        updateHabitList(habits);
+        // Reinitialize drag and drop after updating habits
+        initializeDragAndDrop();
+    }, error => {
+        console.error("Habit listener error:", error);
+    });
 }
 
 // Update initializeBoard to use the global setupDragAndDrop
