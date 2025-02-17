@@ -1177,16 +1177,36 @@ function initializeBoard() {
 function setupTaskDragAndDrop(task) {
     if (!task) return;
 
-    task.draggable = true;  // Ensure draggable is set
+    task.draggable = true;
     
     task.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', task.textContent);  // Set transfer data
-        dragStartColor = window.getComputedStyle(task).backgroundColor;
         task.classList.add('dragging');
+        e.dataTransfer.setData('text/plain', task.textContent);
+        dragStartColor = window.getComputedStyle(task).backgroundColor;
     });
 
-    task.addEventListener('dragend', () => {
+    task.addEventListener('dragend', (e) => {
         task.classList.remove('dragging');
+        
+        // Update task position in Firebase
+        const columnIndex = getColumnIndex(task);
+        if (isAuthenticated && columnIndex !== null) {
+            db.collection('task')
+                .where('text', '==', task.textContent)
+                .get()
+                .then(querySnapshot => {
+                    querySnapshot.forEach(doc => {
+                        doc.ref.update({
+                            when: columnIndex
+                        }).catch(error => {
+                            console.error('Error updating task position:', error);
+                        });
+                    });
+                })
+                .catch(error => {
+                    console.error('Error finding task to update:', error);
+                });
+        }
     });
 }
 
@@ -1194,11 +1214,24 @@ function setupTaskDragAndDrop(task) {
 function setupHabitDragAndDrop(habit) {
     if (!habit) return;
 
-    habit.draggable = true;  // Ensure draggable is set
+    habit.draggable = true;
+    
+    // Prevent dragging when clicking checkboxes
+    habit.querySelectorAll('.checkbox').forEach(checkbox => {
+        checkbox.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+        });
+    });
     
     habit.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', habit.querySelector('.task-name').textContent);  // Set transfer data
+        // Only allow dragging by the drag handle or task name
+        if (!e.target.classList.contains('drag-handle') && 
+            !e.target.classList.contains('task-name')) {
+            e.preventDefault();
+            return;
+        }
         habit.classList.add('dragging');
+        e.dataTransfer.setData('text/plain', habit.querySelector('.task-name').textContent);
     });
 
     habit.addEventListener('dragend', () => {
@@ -1207,27 +1240,27 @@ function setupHabitDragAndDrop(habit) {
         // Update habit order in Firebase
         const habitList = habit.closest('.task-list');
         const habits = [...habitList.querySelectorAll('.task-item')];
-        const habitOrder = habits.map(h => h.querySelector('.task-name').textContent);
+        const habitOrder = habits.map((h, index) => ({
+            name: h.querySelector('.task-name').textContent,
+            order: index
+        }));
         
         if (isAuthenticated) {
+            // Update all habits' order in a batch
             const batch = db.batch();
             
-            db.collection('habit').get().then(snapshot => {
-                const habitDocs = new Map();
-                snapshot.forEach(doc => {
-                    habitDocs.set(doc.data().name, doc.ref);
-                });
-                
-                habitOrder.forEach((habitName, index) => {
-                    const habitRef = habitDocs.get(habitName);
-                    if (habitRef) {
-                        batch.update(habitRef, { order: index });
-                    }
-                });
-                
-                batch.commit().catch(error => {
-                    console.error('Error updating habit order:', error);
-                });
+            habitOrder.forEach(({name, order}) => {
+                db.collection('habit')
+                    .where('name', '==', name)
+                    .get()
+                    .then(querySnapshot => {
+                        querySnapshot.forEach(doc => {
+                            doc.ref.update({ order: order });
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error updating habit order:', error);
+                    });
             });
         }
     });
@@ -1829,8 +1862,6 @@ function initializeDragAndDrop() {
 
 
  
-
-
 
 
 
