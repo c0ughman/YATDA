@@ -1012,6 +1012,125 @@ function initializeScheduler() {
     }
 }
 
+// =============== Add Habit Functions ===============
+function initializeAddHabit() {
+    const addHabitDiv = document.querySelector('.add-habit');
+    const plusIcon = addHabitDiv.querySelector('.plus-icon');
+    const input = addHabitDiv.querySelector('.add-habit-input');
+
+    // Handle clicking the add habit button
+    addHabitDiv.addEventListener('click', (e) => {
+        if (e.target === addHabitDiv || e.target === plusIcon) {
+            input.classList.add('active');
+            plusIcon.style.display = 'none';
+            input.focus();
+        }
+    });
+
+    // Handle input blur (clicking away)
+    input.addEventListener('blur', () => {
+        input.classList.remove('active');
+        plusIcon.style.display = 'block';
+        input.value = '';
+    });
+
+    // Handle Enter key press
+    input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && input.value.trim()) {
+            if (isAuthenticated) {
+                // Firebase version
+                db.collection('habit').add({
+                    name: input.value.trim(),
+                    monday: false,
+                    tuesday: false,
+                    wednesday: false,
+                    thursday: false,
+                    friday: false,
+                    saturday: false,
+                    sunday: false
+                }).catch(error => {
+                    console.error('Error adding habit:', error);
+                });
+            } else {
+                // LocalStorage version
+                const habits = JSON.parse(localStorage.getItem('habits') || '[]');
+                habits.push({
+                    name: input.value.trim(),
+                    monday: false,
+                    tuesday: false,
+                    wednesday: false,
+                    thursday: false,
+                    friday: false,
+                    saturday: false,
+                    sunday: false
+                });
+                localStorage.setItem('habits', JSON.stringify(habits));
+                updateTaskList(habits.map(h => h.name));
+            }
+            
+            // Reset the input
+            input.value = '';
+            input.classList.remove('active');
+            plusIcon.style.display = 'block';
+        }
+    });
+}
+
+function setupDoubleClickHandlers() {
+    // For scheduler time blocks
+    const timeBlocks = document.querySelectorAll('.time-block');
+    timeBlocks.forEach(block => {
+        block.querySelector('.time-input').addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            e.target.value = '';
+            if (block.classList.contains('split')) {
+                mergeSections(block);
+            }
+            block.classList.remove('active');
+            block.classList.remove('x-task');
+            e.target.disabled = false;
+        });
+    });
+
+    // For task list items
+    const taskItems = document.querySelectorAll('.task-item');
+    taskItems.forEach(item => {
+        item.addEventListener('dblclick', (e) => {
+            if (!e.target.classList.contains('checkbox')) {
+                const habitName = item.querySelector('.task-name').textContent;
+                if (isAuthenticated) {
+                    deleteHabit(habitName);
+                } else {
+                    const habits = JSON.parse(localStorage.getItem('habits') || '[]');
+                    const filteredHabits = habits.filter(habit => habit.name !== habitName);
+                    localStorage.setItem('habits', JSON.stringify(filteredHabits));
+                    updateTaskList(filteredHabits.map(h => h.name));
+                }
+                item.remove();
+            }
+        });
+    });
+
+    // For board tasks
+    const boardTasks = document.querySelectorAll('.board .task');
+    boardTasks.forEach(task => {
+        task.addEventListener('dblclick', (e) => {
+            const columnIndex = task.closest('.column').classList.contains('one-thing') ? 0 :
+                              task.closest('.column').classList.contains('today') ? 1 : 2;
+            if (isAuthenticated) {
+                deleteTask(task.textContent, columnIndex);
+            } else {
+                const tasks = JSON.parse(localStorage.getItem('tasks') || '{"0":[],"1":[],"2":[]}');
+                tasks[columnIndex] = tasks[columnIndex].filter(t => t !== task.textContent);
+                localStorage.setItem('tasks', JSON.stringify(tasks));
+                updateBoard(tasks);
+            }
+            task.remove();
+        });
+    });
+}
+
+      
 // =============== Firebase Operations ===============
 function setupFirebaseListeners() {
     db.collection('chunksheet').doc('chunksheet')
