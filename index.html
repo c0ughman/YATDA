@@ -538,7 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize UI components first
     initializeScheduler();
     initializeBoard();
-    initializeTaskList();
+    initializeHabitList();
     initializeAddHabit();
     setupDoubleClickHandlers();
 
@@ -582,7 +582,7 @@ function setupLocalStorageListeners() {
     updateBoard(tasks);
 
     const habits = JSON.parse(localStorage.getItem('habits') || '[]');
-    updateTaskList(habits);
+    updateHabitList(habits);
 }
 
 // Modify your database operations to check authentication
@@ -952,8 +952,34 @@ function initializeBoard() {
     });
 }
 
-// =============== Task List Functions ===============
-function createTaskElement(taskName) {
+// =============== Habit Functions ===============
+function setupHabitDragAndDrop(habit) {
+    if (!habit) return;
+
+    // Remove any existing listeners first
+    const newHabit = habit.cloneNode(true);
+    habit.parentNode?.replaceChild(newHabit, habit);
+    
+    newHabit.addEventListener('dragstart', () => {
+        newHabit.classList.add('dragging');
+    });
+
+    newHabit.addEventListener('dragend', () => {
+        newHabit.classList.remove('dragging');
+    });
+
+    newHabit.addEventListener('dblclick', (e) => {
+        if (!e.target.classList.contains('checkbox')) {
+            const habitName = newHabit.querySelector('.task-name').textContent;
+            deleteHabit(habitName);
+            newHabit.remove();
+        }
+    });
+
+    return newHabit;
+}
+
+function createHabitElement(habitName) {
     const li = document.createElement('li');
     li.className = 'task-item';
     li.draggable = true;
@@ -961,7 +987,7 @@ function createTaskElement(taskName) {
     const checkboxesHtml = Array(7).fill('<input type="checkbox" class="checkbox">').join('');
     
     li.innerHTML = `
-        <span class="task-name">${taskName}</span>
+        <span class="task-name">${habitName}</span>
         <div class="checkboxes">
             ${checkboxesHtml}
         </div>
@@ -981,54 +1007,40 @@ function createTaskElement(taskName) {
         });
     });
 
-    li.addEventListener('dblclick', (e) => {
-        if (!e.target.classList.contains('checkbox')) {
-            const habitName = li.querySelector('.task-name').textContent;
-            deleteHabit(habitName);
-            li.remove();
-        }
-    });
-
-    setupTaskListDrag(li);
+    setupHabitDragAndDrop(li);
     return li;
 }
 
-function initializeTaskList() {
-    const taskList = document.querySelector('.task-list');
-    taskList.innerHTML = '';
+function initializeHabitList() {
+    const habitList = document.querySelector('.task-list');
+    habitList.innerHTML = '';
     
-    taskList.addEventListener('dragover', e => {
+    habitList.addEventListener('dragover', e => {
         e.preventDefault();
         const draggingItem = document.querySelector('.task-item.dragging');
         if (draggingItem) {
-            const siblings = [...taskList.querySelectorAll('.task-item:not(.dragging)')];
+            const siblings = [...habitList.querySelectorAll('.task-item:not(.dragging)')];
             const nextSibling = siblings.find(sibling => {
                 const box = sibling.getBoundingClientRect();
                 return e.clientY < box.top + box.height / 2;
             });
 
             if (nextSibling) {
-                taskList.insertBefore(draggingItem, nextSibling);
+                habitList.insertBefore(draggingItem, nextSibling);
             } else {
-                taskList.appendChild(draggingItem);
+                habitList.appendChild(draggingItem);
             }
         }
     });
 }
 
-function setupTaskListDrag(item) {
-    item.addEventListener('dragstart', () => {
-        item.classList.add('dragging');
+function updateHabitList(habits) {
+    const habitList = document.querySelector('.task-list');
+    habitList.innerHTML = '';
+    habits.forEach(habit => {
+        const habitElement = createHabitElement(habit);
+        habitList.appendChild(habitElement);
     });
-
-    item.addEventListener('dragend', () => {
-        item.classList.remove('dragging');
-    });
-}
-
-function getRandomColor() {
-    const hue = Math.floor(Math.random() * 360);
-    return `hsl(${hue}, 70%, 40%)`;
 }
 
 // =============== Initialize Scheduler ===============
@@ -1112,7 +1124,7 @@ function initializeAddHabit() {
                     sunday: false
                 });
                 localStorage.setItem('habits', JSON.stringify(habits));
-                updateTaskList(habits.map(h => h.name));
+                updateHabitList(habits.map(h => h.name));
             }
             
             // Reset the input
@@ -1151,7 +1163,7 @@ function setupDoubleClickHandlers() {
                     const habits = JSON.parse(localStorage.getItem('habits') || '[]');
                     const filteredHabits = habits.filter(habit => habit.name !== habitName);
                     localStorage.setItem('habits', JSON.stringify(filteredHabits));
-                    updateTaskList(filteredHabits.map(h => h.name));
+                    updateHabitList(filteredHabits.map(h => h.name));
                 }
                 item.remove();
             }
@@ -1212,7 +1224,7 @@ function setupFirebaseListeners() {
                     habits.push(data.name);
                 }
             });
-            updateTaskList(habits);
+            updateHabitList(habits);
         }, error => {
             console.error("Habit listener error:", error);
         });
@@ -1276,13 +1288,37 @@ function updateBoard(tasks) {
     });
 }
 
-function updateTaskList(habits) {
-    const taskList = document.querySelector('.task-list');
-    taskList.innerHTML = '';
-    habits.forEach(habit => {
-        const taskElement = createTaskElement(habit);
-        taskList.appendChild(taskElement);
-    });
+function deleteTask(taskText, columnIndex) {
+    db.collection('task')
+        .where('text', '==', taskText)
+        .where('when', '==', columnIndex)
+        .get()
+        .then(querySnapshot => {
+            querySnapshot.forEach(doc => {
+                doc.ref.delete().catch(error => {
+                    console.error('Error deleting task:', error);
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Error finding task to delete:', error);
+        });
+}
+
+function deleteHabit(habitName) {
+    db.collection('habit')
+        .where('name', '==', habitName)
+        .get()
+        .then(querySnapshot => {
+            querySnapshot.forEach(doc => {
+                doc.ref.delete().catch(error => {
+                    console.error('Error deleting habit:', error);
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Error finding habit to delete:', error);
+        });
 }
 
 // =============== Firebase Sync Functions ===============
@@ -1327,40 +1363,6 @@ function syncHabitChanges() {
     });
 }
 
-// =============== Delete Operations ===============
-function deleteTask(taskText, columnIndex) {
-    db.collection('task')
-        .where('text', '==', taskText)
-        .where('when', '==', columnIndex)
-        .get()
-        .then(querySnapshot => {
-            querySnapshot.forEach(doc => {
-                doc.ref.delete().catch(error => {
-                    console.error('Error deleting task:', error);
-                });
-            });
-        })
-        .catch(error => {
-            console.error('Error finding task to delete:', error);
-        });
-}
-
-function deleteHabit(habitName) {
-    db.collection('habit')
-        .where('name', '==', habitName)
-        .get()
-        .then(querySnapshot => {
-            querySnapshot.forEach(doc => {
-                doc.ref.delete().catch(error => {
-                    console.error('Error deleting habit:', error);
-                });
-            });
-        })
-        .catch(error => {
-            console.error('Error finding habit to delete:', error);
-        });
-}
-
 // =============== Main Initialization ===============
 document.addEventListener('DOMContentLoaded', () => {
     // Sign in anonymously first
@@ -1371,7 +1373,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Initialize all components
             initializeScheduler();
             initializeBoard();
-            initializeTaskList();
+            initializeHabitList();
             initializeAddHabit();
             setupDoubleClickHandlers();
             
@@ -1392,3 +1394,5 @@ document.addEventListener('DOMContentLoaded', () => {
     
 </body>
 </html>
+
+
