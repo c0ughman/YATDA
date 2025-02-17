@@ -1125,48 +1125,32 @@ function initializeDragAndDrop() {
 
 // Update Firebase listeners to reinitialize drag and drop
 function setupFirebaseListeners() {
-    // Set up listeners for each day's scheduler
-    const days = ['chunksheet', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    
-    days.forEach(day => {
-        db.collection('chunksheet').doc(day)
-            .onSnapshot(doc => {
-                const containerId = day === 'chunksheet' ? 'timeBlocks' : `timeBlocks-${day}`;
-                const container = document.getElementById(containerId);
-                
-                if (container && doc.exists) {
-                    updateScheduler(doc.data(), container);
-                }
-            }, error => {
-                console.error(`${day} listener error:`, error);
-            });
+    // Existing task listener
+    db.collection('task').onSnapshot(snapshot => {
+        const tasks = { 0: [], 1: [], 2: [] };
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data && typeof data.when === 'number' && data.when >= 0 && data.when <= 2) {
+                tasks[data.when].push(data.text);
+            }
+        });
+        updateBoard(tasks);
+        // Reinitialize drag and drop after updating board
+        initializeDragAndDrop();
+    }, error => {
+        console.error("Task listener error:", error);
     });
 
-    // Set up listener for tasks
-    db.collection('task')
-        .onSnapshot(snapshot => {
-            const tasks = { 0: [], 1: [], 2: [] };
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                if (data && typeof data.when === 'number' && data.when >= 0 && data.when <= 2) {
-                    tasks[data.when].push(data.text);
-                }
-            });
-            updateBoard(tasks);
-        }, error => {
-            console.error("Task listener error:", error);
-        });
-
-    // Set up listener for habits
-    db.collection('habit')
+    // Update the habit listener to use a single listener
+    const unsubscribeHabits = db.collection('habit')
         .orderBy('order')
         .onSnapshot(snapshot => {
             const habits = [];
-            snapshot.forEach(doc => {
-                const data = doc.data();
+            snapshot.docChanges().forEach(change => {
+                const data = change.doc.data();
                 if (data && data.name) {
                     habits.push({
-                        id: doc.id,
+                        id: change.doc.id,
                         name: data.name,
                         monday: data.monday || false,
                         tuesday: data.tuesday || false,
@@ -1664,7 +1648,7 @@ function setupFirebaseListeners() {
 
 function updateScheduler(data, target = document.getElementById('timeBlocks')) {
     if (!data) return;
-    const timeBlocks = target.querySelectorAll('.time-block');
+    const timeBlocks = target.querySelectorAll('.time-input');
     
     timeBlocks.forEach(block => {
         const input = block.querySelector('.time-input');
@@ -1756,33 +1740,36 @@ function deleteHabit(habitName) {
 
 // =============== Firebase Sync Functions ===============
 function syncSchedulerChanges() {
-    const schedulers = document.querySelectorAll('.scheduler');
-    
-    schedulers.forEach(scheduler => {
-        const dayTitle = scheduler.querySelector('.day-title').textContent.toLowerCase();
-        const docName = dayTitle === 'today' ? 'chunksheet' : dayTitle;
-        
-        const timeBlocks = scheduler.querySelectorAll('.time-block');
-        timeBlocks.forEach(block => {
-            const input = block.querySelector('.time-input');
+    const timeBlocks = document.querySelectorAll('.time-block');
+    timeBlocks.forEach(block => {
+        const input = block.querySelector('.time-input');
+        if (input) {  // Add null check
             input.addEventListener('change', () => {
                 try {
                     const hour = input.placeholder.match(/\d+/)[0];
                     const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
                     
-                    db.collection('chunksheet').doc(docName).set({
+                    // Get the scheduler container and day title to determine which document to update
+                    const scheduler = block.closest('.scheduler');
+                    const dayTitle = scheduler.querySelector('.day-title');
+                    const docName = dayTitle ? 
+                        dayTitle.textContent.toLowerCase() === 'today' ? 
+                            'chunksheet' : 
+                            dayTitle.textContent.toLowerCase() : 
+                        'chunksheet';
+
+                    db.collection('chunksheet').doc(docName).update({
                         [key]: input.value
-                    }, { merge: true }).catch(error => {
-                        console.error(`Error updating ${dayTitle} scheduler:`, error);
+                    }).catch(error => {
+                        console.error('Error updating scheduler:', error);
                     });
                 } catch (error) {
-                    console.error(`Error in ${dayTitle} scheduler sync:`, error);
+                    console.error('Error in scheduler sync:', error);
                 }
             });
-        });
+        }
     });
 }
-
 
 function syncHabitChanges() {
     const addHabitDiv = document.querySelector('.add-habit');
@@ -1975,10 +1962,9 @@ function createDayScheduler(dayName, docName) {
     title.textContent = dayName;
     
     const timeBlocks = document.createElement('div');
-    timeBlocks.id = `timeBlocks-${docName}`; // Add unique ID
     timeBlocks.className = 'timeBlocks';
     
-    // Create time blocks
+    // Create time blocks (same as original scheduler)
     for (let hour = 0; hour < 24; hour++) {
         const timeBlock = document.createElement('div');
         timeBlock.className = `time-block ${getTimeBlockColor(hour)}`;
@@ -1988,6 +1974,19 @@ function createDayScheduler(dayName, docName) {
         input.className = 'time-input';
         input.placeholder = formatTime(hour);
         
+        // Add change event listener for Firebase sync
+        input.addEventListener('change', () => {
+            const hour = input.placeholder.match(/\d+/)[0];
+            const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
+            
+            // Update Firebase with the new value
+            db.collection('chunksheet').doc(docName).set({
+                [key]: input.value
+            }, { merge: true }).catch(error => {
+                console.error('Error updating scheduler:', error);
+            });
+        });
+        
         const checkmark = document.createElement('span');
         checkmark.className = 'checkmark';
         checkmark.textContent = '✓';
@@ -1995,25 +1994,8 @@ function createDayScheduler(dayName, docName) {
         timeBlock.appendChild(input);
         timeBlock.appendChild(checkmark);
         
-        // Add event listeners
         attachEventListeners(timeBlock);
         checkmark.addEventListener('click', handleRegularCheckmark);
-        
-        // Add specific save functionality for this day
-        input.addEventListener('change', () => {
-            try {
-                const hour = input.placeholder.match(/\d+/)[0];
-                const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
-                
-                db.collection('chunksheet').doc(docName).set({
-                    [key]: input.value
-                }, { merge: true }).catch(error => {
-                    console.error(`Error updating ${dayName} scheduler:`, error);
-                });
-            } catch (error) {
-                console.error(`Error in ${dayName} scheduler sync:`, error);
-            }
-        });
         
         timeBlocks.appendChild(timeBlock);
     }
@@ -2036,51 +2018,31 @@ function createDayScheduler(dayName, docName) {
     return scheduler;
 }
 
+function expandSchedulers() {
+    const container = document.querySelector('.scheduler-container');
+    const expandButton = document.querySelector('.expand-button');
+    
+    const days = [
+        { name: 'Tuesday', doc: 'tuesday' },
+        { name: 'Wednesday', doc: 'wednesday' },
+        { name: 'Thursday', doc: 'thursday' },
+        { name: 'Friday', doc: 'friday' },
+        { name: 'Saturday', doc: 'saturday' },
+        { name: 'Sunday', doc: 'sunday' }
+    ];
+    
+    days.forEach(day => {
+        const dayScheduler = createDayScheduler(day.name, day.doc);
+        container.appendChild(dayScheduler);
+    });
+    
+    expandButton.remove();  // Remove the expand button after expanding
+}
 
 </script>
     
 </body>
 </html>
-
-
-
-
- 
-
-
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
- 
-
 
  
 
