@@ -1177,55 +1177,47 @@ function initializeBoard() {
 function setupTaskDragAndDrop(task) {
     if (!task) return;
 
-    // Remove any existing listeners first
-    const newTask = task.cloneNode(true);
-    task.parentNode?.replaceChild(newTask, task);
+    task.draggable = true;  // Ensure draggable is set
     
-    newTask.addEventListener('dragstart', () => {
-        dragStartColor = window.getComputedStyle(newTask).backgroundColor;
-        newTask.classList.add('dragging');
+    task.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', task.textContent);  // Set transfer data
+        dragStartColor = window.getComputedStyle(task).backgroundColor;
+        task.classList.add('dragging');
     });
 
-    newTask.addEventListener('dragend', () => {
-        newTask.classList.remove('dragging');
+    task.addEventListener('dragend', () => {
+        task.classList.remove('dragging');
     });
-
-    return newTask;
 }
 
 // =============== Habit Functions ===============
 function setupHabitDragAndDrop(habit) {
     if (!habit) return;
 
-    // Remove any existing listeners first
-    const newHabit = habit.cloneNode(true);
-    habit.parentNode?.replaceChild(newHabit, habit);
+    habit.draggable = true;  // Ensure draggable is set
     
-    newHabit.addEventListener('dragstart', () => {
-        newHabit.classList.add('dragging');
+    habit.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', habit.querySelector('.task-name').textContent);  // Set transfer data
+        habit.classList.add('dragging');
     });
 
-    newHabit.addEventListener('dragend', () => {
-        newHabit.classList.remove('dragging');
+    habit.addEventListener('dragend', () => {
+        habit.classList.remove('dragging');
         
-        // Get all habits in new order
-        const habitList = newHabit.closest('.task-list');
+        // Update habit order in Firebase
+        const habitList = habit.closest('.task-list');
         const habits = [...habitList.querySelectorAll('.task-item')];
         const habitOrder = habits.map(h => h.querySelector('.task-name').textContent);
         
-        // Update order in Firebase if authenticated
         if (isAuthenticated) {
-            // Create a batch to update all habits
             const batch = db.batch();
             
-            // Get all habits and their refs
             db.collection('habit').get().then(snapshot => {
                 const habitDocs = new Map();
                 snapshot.forEach(doc => {
                     habitDocs.set(doc.data().name, doc.ref);
                 });
                 
-                // Update each habit's order
                 habitOrder.forEach((habitName, index) => {
                     const habitRef = habitDocs.get(habitName);
                     if (habitRef) {
@@ -1233,15 +1225,12 @@ function setupHabitDragAndDrop(habit) {
                     }
                 });
                 
-                // Commit the batch
                 batch.commit().catch(error => {
                     console.error('Error updating habit order:', error);
                 });
             });
         }
     });
-
-    return newHabit;
 }
 
 function getRandomColor() {
@@ -1840,10 +1829,6 @@ function initializeDragAndDrop() {
 
 
  
-
-
-
-
 
 
 
