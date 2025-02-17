@@ -1063,16 +1063,16 @@ function setupFirebaseListeners() {
         console.error("Task listener error:", error);
     });
 
-    // Existing habit listener
-    db.collection('habit')
+    // Update the habit listener to use a single listener
+    const unsubscribeHabits = db.collection('habit')
         .orderBy('order')
         .onSnapshot(snapshot => {
             const habits = [];
-            snapshot.forEach(doc => {
-                const data = doc.data();
+            snapshot.docChanges().forEach(change => {
+                const data = change.doc.data();
                 if (data && data.name) {
                     habits.push({
-                        id: doc.id,
+                        id: change.doc.id,
                         name: data.name,
                         monday: data.monday || false,
                         tuesday: data.tuesday || false,
@@ -1088,8 +1088,6 @@ function setupFirebaseListeners() {
             // Sort habits by order before updating
             habits.sort((a, b) => a.order - b.order);
             updateHabitList(habits);
-            // Reinitialize drag and drop after updating habits
-            initializeDragAndDrop();
         }, error => {
             console.error("Habit listener error:", error);
         });
@@ -1447,7 +1445,7 @@ function initializeAddHabit() {
                         friday: false,
                         saturday: false,
                         sunday: false,
-                        order: currentHighestOrder + 1
+                        order: currentHighestOrder + 1000 // Use larger increments to allow for reordering
                     });
                 } catch (error) {
                     console.error('Error adding habit:', error);
@@ -1759,33 +1757,6 @@ function initializeHabitList() {
             }
         }
     });
-
-    // Load initial habits from Firebase if authenticated
-    if (isAuthenticated) {
-        db.collection('habit').get()
-            .then(snapshot => {
-                const habits = [];
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    if (data && data.name) {
-                        habits.push({
-                            name: data.name,
-                            monday: data.monday || false,
-                            tuesday: data.tuesday || false,
-                            wednesday: data.wednesday || false,
-                            thursday: data.thursday || false,
-                            friday: data.friday || false,
-                            saturday: data.saturday || false,
-                            sunday: data.sunday || false
-                        });
-                    }
-                });
-                updateHabitList(habits);
-            })
-            .catch(error => {
-                console.error("Error loading initial habits:", error);
-            });
-    }
 }
 
 // Add new setupColumnDragHandlers function
@@ -1904,6 +1875,10 @@ function initializeDragAndDrop() {
 
 
  
+
+
+
+
 
 
 
