@@ -36,7 +36,6 @@ body {
 .title-container {
     text-align: center;
     margin-bottom: 20px;
-    position: relative;
 }
 
 .main-title {
@@ -52,40 +51,6 @@ body {
     letter-spacing: 2px;
 }
 
-/* View Toggle Button */
-.view-toggle {
-    position: absolute;
-    top: 50%;
-    right: 20px;
-    transform: translateY(-50%);
-    background-color: #2a2a2a;
-    color: rgba(255, 255, 255, 0.8);
-    border: none;
-    border-radius: 8px;
-    padding: 8px 16px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.view-toggle:hover {
-    background-color: #3a3a3a;
-    color: white;
-}
-
-.view-toggle svg {
-    width: 16px;
-    height: 16px;
-    transition: transform 0.3s ease;
-}
-
-.view-toggle.expanded svg {
-    transform: rotate(180deg);
-}
-
 /* Scheduler Container */
 .scheduler-container {
     display: flex;
@@ -93,7 +58,6 @@ body {
     overflow-x: auto;
     margin-bottom: 15px;
     transition: all 0.3s ease;
-    position: relative;
 }
 
 .scheduler-container.expanded {
@@ -204,6 +168,24 @@ body {
 .night.active, .split-section.night.active { background-color: #563c76; }
 
 .x-task { background-color: #1a1a1a !important; }
+
+/* Expand Button */
+.expand-button {
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
+    background-color: #3a3a3a;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.expand-button:hover {
+    background-color: #4a4a4a;
+}
 
 /* Content Layout */
 .content-row {
@@ -350,14 +332,6 @@ body {
         width: 100%;
         justify-content: space-between;
     }
-    
-    .view-toggle {
-        position: relative;
-        top: 0;
-        right: 0;
-        transform: none;
-        margin: 10px auto;
-    }
 }
     </style>
 </head>
@@ -374,12 +348,7 @@ body {
             <div class="scheduler">
                 <div class="day-title">Today</div>
                 <div id="timeBlocks"></div>
-                <button class="view-toggle">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                    <span class="toggle-text">Expand View</span>
-                </button>
+                <button class="expand-button">+</button>
             </div>
         </div>
 
@@ -453,32 +422,6 @@ const auth = firebase.auth();
 // Track authentication state
 let isAuthenticated = false;
 
-
-document.addEventListener('DOMContentLoaded', () => {
-    const viewToggle = document.querySelector('.view-toggle');
-    const schedulerContainer = document.querySelector('.scheduler-container');
-    
-    viewToggle.addEventListener('click', () => {
-        schedulerContainer.classList.toggle('expanded');
-        viewToggle.classList.toggle('expanded');
-        
-        const toggleText = viewToggle.querySelector('.toggle-text');
-        if (schedulerContainer.classList.contains('expanded')) {
-            toggleText.textContent = 'Collapse View';
-            // Add additional schedulers if they don't exist
-            if (schedulerContainer.children.length === 1) {
-                expandSchedulers();
-            }
-        } else {
-            toggleText.textContent = 'Expand View';
-            // Optionally remove additional schedulers
-            Array.from(schedulerContainer.children).slice(1).forEach(scheduler => {
-                scheduler.remove();
-            });
-        }
-    });
-});
-      
 // Main initialization
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize UI components first
@@ -518,6 +461,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Add expand button handler
+    const expandButton = document.querySelector('.expand-button');
+    expandButton.addEventListener('click', expandSchedulers);
+});
 
 // Add fallback local storage functions
 function setupLocalStorageListeners() {
@@ -1905,6 +1852,7 @@ function createDayScheduler(dayName, docName) {
 
 function expandSchedulers() {
     const container = document.querySelector('.scheduler-container');
+    const expandButton = document.querySelector('.expand-button');
     
     // Add expanded class to container
     container.classList.add('expanded');
@@ -1926,12 +1874,14 @@ function expandSchedulers() {
     // Re-initialize sync functionality for all schedulers
     syncSchedulerChanges();
     
+    expandButton.remove();
 }
 
 </script>
     
 </body>
 </html>
+
 
 
 
