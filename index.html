@@ -46,6 +46,19 @@
             transition: all 0.3s ease;
         }
 
+        .scheduler-container.expanded {
+            width: 100%;
+    }
+
+        .scheduler-container.expanded .time-block {
+            font-size: 0.9rem;
+            padding: 10px;
+        }
+        
+        .scheduler-container.expanded .time-input {
+            font-size: 0.9rem;
+        }
+
         .scheduler {
             background-color: #2a2a2a;
             border-radius: 12px;
@@ -2029,10 +2042,12 @@ function createDayScheduler(dayName, docName) {
     return scheduler;
 }
 
-
 function expandSchedulers() {
     const container = document.querySelector('.scheduler-container');
     const expandButton = document.querySelector('.expand-button');
+    
+    // Add expanded class to container
+    container.classList.add('expanded');
     
     const days = [
         { name: 'Tuesday', doc: 'tuesday' },
