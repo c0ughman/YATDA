@@ -348,8 +348,16 @@ body {
             <div class="scheduler">
                 <div class="day-title">Today</div>
                 <div id="timeBlocks"></div>
-                <button class="expand-button">+</button>
             </div>
+        </div>
+
+        <div class="view-toggle-container">
+            <button class="view-toggle">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+                <span class="toggle-text">Show Week View</span>
+            </button>
         </div>
 
         <!-- Content Row -->
@@ -423,49 +431,30 @@ const auth = firebase.auth();
 let isAuthenticated = false;
 
 // Main initialization
+// Replace the existing event listener at the beginning of your file
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize UI components first
-    initializeScheduler();
-    initializeBoard();
-    initializeHabitList();
-    initializeAddHabit();
-    setupDoubleClickHandlers();
-
-    // Handle authentication state changes
-    auth.onAuthStateChanged((user) => {
-        if (user) {
-            console.log('User is authenticated:', user.uid);
-            isAuthenticated = true;
-            
-            // Only set up Firebase listeners after authentication
-            setupFirebaseListeners();
-            
-            // Set up sync handlers
-            syncSchedulerChanges();
-            syncTaskChanges();
-            syncHabitChanges();
+    const viewToggle = document.querySelector('.view-toggle');
+    const schedulerContainer = document.querySelector('.scheduler-container');
+    let additionalSchedulers = [];
+    
+    viewToggle.addEventListener('click', () => {
+        schedulerContainer.classList.toggle('expanded');
+        viewToggle.classList.toggle('expanded');
+        
+        const toggleText = viewToggle.querySelector('.toggle-text');
+        if (schedulerContainer.classList.contains('expanded')) {
+            toggleText.textContent = 'Show Single Day';
+            expandSchedulers();
         } else {
-            console.log('User is not authenticated, attempting anonymous sign-in...');
-            isAuthenticated = false;
-            
-            // Attempt anonymous sign-in
-            auth.signInAnonymously()
-                .catch((error) => {
-                    console.error('Error signing in:', error);
-                    // If anonymous auth fails, fall back to local storage
-                    if (error.code === 'auth/admin-restricted-operation') {
-                        console.log('Falling back to local storage...');
-                        setupLocalStorageListeners();
-                    }
-                });
+            toggleText.textContent = 'Show Week View';
+            // Remove all schedulers except the first one
+            const firstScheduler = schedulerContainer.firstElementChild;
+            schedulerContainer.innerHTML = '';
+            schedulerContainer.appendChild(firstScheduler);
         }
     });
-
-    // Add expand button handler
-    const expandButton = document.querySelector('.expand-button');
-    expandButton.addEventListener('click', expandSchedulers);
 });
-
+      
 // Add fallback local storage functions
 function setupLocalStorageListeners() {
     const chunksheet = JSON.parse(localStorage.getItem('chunksheet') || '{}');
@@ -1852,10 +1841,6 @@ function createDayScheduler(dayName, docName) {
 
 function expandSchedulers() {
     const container = document.querySelector('.scheduler-container');
-    const expandButton = document.querySelector('.expand-button');
-    
-    // Add expanded class to container
-    container.classList.add('expanded');
     
     const days = [
         { name: 'Tuesday', doc: 'tuesday' },
@@ -1866,6 +1851,12 @@ function expandSchedulers() {
         { name: 'Sunday', doc: 'sunday' }
     ];
     
+    // Clear existing additional schedulers
+    const firstScheduler = container.firstElementChild;
+    container.innerHTML = '';
+    container.appendChild(firstScheduler);
+    
+    // Add new schedulers
     days.forEach(day => {
         const dayScheduler = createDayScheduler(day.name, day.doc);
         container.appendChild(dayScheduler);
@@ -1873,7 +1864,6 @@ function expandSchedulers() {
     
     // Re-initialize sync functionality for all schedulers
     syncSchedulerChanges();
-    
 }
 
 </script>
