@@ -1740,21 +1740,35 @@ function deleteHabit(habitName) {
 
 // =============== Firebase Sync Functions ===============
 function syncSchedulerChanges() {
-    const timeBlocks = document.querySelectorAll('.time-block');
-    timeBlocks.forEach(block => {
-        const input = block.querySelector('.time-input');
-        input.addEventListener('change', () => {
-            try {
-                const hour = input.placeholder.match(/\d+/)[0];
-                const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
-                db.collection('chunksheet').doc('chunksheet').update({
-                    [key]: input.value
-                }).catch(error => {
-                    console.error('Error updating scheduler:', error);
-                });
-            } catch (error) {
-                console.error('Error in scheduler sync:', error);
-            }
+    // Get all schedulers
+    const schedulers = document.querySelectorAll('.scheduler');
+    
+    schedulers.forEach(scheduler => {
+        const dayTitle = scheduler.querySelector('.day-title');
+        const docName = dayTitle ? dayTitle.textContent.toLowerCase() : 'chunksheet';
+        
+        const timeBlocks = scheduler.querySelectorAll('.time-block');
+        timeBlocks.forEach(block => {
+            const input = block.querySelector('.time-input');
+            input.addEventListener('change', () => {
+                try {
+                    const hour = input.placeholder.match(/\d+/)[0];
+                    const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
+                    
+                    // Create the document if it doesn't exist
+                    db.collection('chunksheet').doc(docName).set({}, { merge: true })
+                    .then(() => {
+                        return db.collection('chunksheet').doc(docName).update({
+                            [key]: input.value
+                        });
+                    })
+                    .catch(error => {
+                        console.error(`Error updating scheduler for ${docName}:`, error);
+                    });
+                } catch (error) {
+                    console.error(`Error in scheduler sync for ${docName}:`, error);
+                }
+            });
         });
     });
 }
@@ -1952,7 +1966,7 @@ function createDayScheduler(dayName, docName) {
     const timeBlocks = document.createElement('div');
     timeBlocks.className = 'timeBlocks';
     
-    // Create time blocks (same as original scheduler)
+    // Create time blocks
     for (let hour = 0; hour < 24; hour++) {
         const timeBlock = document.createElement('div');
         timeBlock.className = `time-block ${getTimeBlockColor(hour)}`;
@@ -1969,8 +1983,30 @@ function createDayScheduler(dayName, docName) {
         timeBlock.appendChild(input);
         timeBlock.appendChild(checkmark);
         
+        // Attach the event listeners
         attachEventListeners(timeBlock);
         checkmark.addEventListener('click', handleRegularCheckmark);
+        
+        // Add change listener for this specific input
+        input.addEventListener('change', () => {
+            try {
+                const hour = input.placeholder.match(/\d+/)[0];
+                const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
+                
+                // Create the document if it doesn't exist and then update it
+                db.collection('chunksheet').doc(docName).set({}, { merge: true })
+                .then(() => {
+                    return db.collection('chunksheet').doc(docName).update({
+                        [key]: input.value
+                    });
+                })
+                .catch(error => {
+                    console.error(`Error updating scheduler for ${docName}:`, error);
+                });
+            } catch (error) {
+                console.error(`Error in scheduler sync for ${docName}:`, error);
+            }
+        });
         
         timeBlocks.appendChild(timeBlock);
     }
@@ -1993,6 +2029,7 @@ function createDayScheduler(dayName, docName) {
     return scheduler;
 }
 
+
 function expandSchedulers() {
     const container = document.querySelector('.scheduler-container');
     const expandButton = document.querySelector('.expand-button');
@@ -2011,7 +2048,10 @@ function expandSchedulers() {
         container.appendChild(dayScheduler);
     });
     
-    expandButton.remove();  // Remove the expand button after expanding
+    // Re-initialize sync functionality for all schedulers
+    syncSchedulerChanges();
+    
+    expandButton.remove();
 }
 
 </script>
