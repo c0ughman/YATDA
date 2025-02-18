@@ -9,509 +9,330 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Combined Dashboard</title>
     <style>
-        /* Base Styles */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        }
-
-        body {
-            background-color: #1a1a1a;
-            color: white;
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .main-container {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .content-row {
-            display: grid;
-            grid-template-columns: 27% 30% 40%;
-            gap: 15px;
-        }
-
-        .scheduler-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 5px;
-            margin-bottom: 15px;
-            transition: all 0.3s ease;
-        }
-
-        .scheduler-container.expanded .time-block {
-            font-size: 0.5rem;
-            padding: 0px;
-        }
-        
-        .scheduler-container.expanded .time-input {
-            font-size: 0.5rem;
-        }
-
-         .scheduler-container.expanded .scheduler {
-            width:50px;
-        }
-
-        .scheduler {
-            background-color: #2a2a2a;
-            border-radius: 12px;
-            padding: 15px;
-            height: fit-content;
-        }
-
-        /* Add media query for mobile devices */
-        @media screen and (max-width: 768px) {
-            .content-row {
-                grid-template-columns: 1fr;
-            }
-            
-            .scheduler-container {
-                grid-template-columns: 1fr;
-            }
-
-            /* Adjust title size for mobile */
-            .subtitle {
-                font-size: 2rem;
-            }
-
-            /* Make board columns more readable on mobile */
-            .board {
-                grid-template-columns: 1fr;  /* Stack board columns vertically */
-                gap: 15px;
-            }
-
-            /* Add some spacing between board sections */
-            .column {
-                margin-bottom: 15px;
-            }
-
-            /* Ensure task list is readable on mobile */
-            .task-item {
-                flex-wrap: wrap;  /* Allow items to wrap on narrow screens */
-            }
-
-            .task-name {
-                width: 100%;  /* Full width on mobile */
-                margin-bottom: 5px;
-            }
-
-            .checkboxes {
-                width: 100%;
-                justify-content: space-between;  /* Spread checkboxes evenly */
-            }
-        }
-
-        /* Scheduler Styles */
-        .scheduler {
-            background-color: #2a2a2a;
-            border-radius: 12px;
-            padding: 5px;
-        }
-
-        .time-selectors {
-            display: flex;
-            align-items: center;
-            gap: 3px;
-            margin-bottom: 20px;
-        }
-
-        .selector-group {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .selector-label {
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.7);
-        }
-
-        select {
-            background-color: #3a3a3a;
-            border: none;
-            border-radius: 4px;
-            color: white;
-            padding: 8px;
-            width: 100%;
-            cursor: pointer;
-        }
-
-        .hours-display {
-            padding: 8px;
-            background-color: #3a3a3a;
-            border-radius: 4px;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .time-block {
-            display: flex;
-            align-items: center;
-            position: relative;
-            border-radius: 4px;
-            transition: all 0.3s ease;
-            border: 1px solid #2a2a2a;
-        }
-
-        .time-block.split {
-            gap: 4px;
-            background: transparent !important;
-        }
-
-        .split-section {
-            position: relative;
-            border-radius: 6px;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-        }
-
-        .split-section:first-child {
-            width: 45%;
-        }
-
-        .split-section:last-child {
-            width: 55%;
-        }
-
-        .time-input {
-            padding: 8px;
-            border: none;
-            border-radius: 4px;
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 0.9rem;
-            background: transparent;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            overflow: hidden;
-        }
-
-        /* Scheduler Time Block Colors */
-        .morning-early {
-            background-color: #4a2639;
-        }
-
-        .day-mid {
-            background-color: #2c4a3e;
-        }
-
-        .evening {
-            background-color: #2c3e4a;
-        }
-
-        .night {
-            background-color: #2b1f36;
-        }
-
-        .morning-early.active, .split-section.morning-early.active {
-            background-color: #8a3960;
-        }
-
-        .day-mid.active, .split-section.day-mid.active {
-            background-color: #3d8066;
-        }
-
-        .evening.active, .split-section.evening.active {
-            background-color: #41718a;
-        }
-
-        .night.active, .split-section.night.active {
-            background-color: #563c76;
-        }
-
-        .x-task {
-            background-color: #1a1a1a !important;
-        }
-
-        .checkmark {
-            position: absolute;
-            right: 12px;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            padding: 5px;
-            z-index: 2;
-        }
-
-        /* Board Styles */
-        .board {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            height: 100%;
-            background-color: #2a2a2a;
-            border-radius: 12px;
-            padding: 5px;
-
-        }
-
-        .column {
-            background-color: #2a2a2a;
-            border-radius: 8px;
-            padding: 0.2rem;
-            min-width: 0; /* Allows text truncation */
-        }
-
-        .column h2 {
-            margin-bottom: 0.5rem;
-            font-size: 1rem;
-        }
-
-        .board .task {
-            padding: 0.5rem;
-            margin-bottom: 0.3rem;
-            border-radius: 4px;
-            cursor: move;
-            transition: background-color 0.5s ease;
-            font-size: 0.9rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .add-task {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 6px;
-            margin-top: 0.3rem;
-            background-color: #1a1a1a;
-            border-radius: 4px;
-            cursor: pointer;
-            height: 32px;
-        }
-
-        .add-task-input {
-            display: none;
-            width: 100%;
-            background-color: transparent;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
-            color: white;
-            font-size: 0.9rem;
-        }
-
-        .add-task-input.active {
-            display: block;
-        }
-
-        .add-task .plus-icon {
-            font-size: 1.2rem;
-            color: #666;
-            text-align: center;
-        }
-
-        /* Board Column Colors */
-        .one-thing .task {
-            background-color: #6b2b5a;
-        }
-
-        .today .task {
-            background-color: #2b5a3f;
-        }
-
-        .do-later .task {
-            background-color: #8b5735;
-        }
-
-        /* Task List Styles */
-        .task-list-container {
-            background-color: #2a2a2a;
-            border-radius: 12px;
-            padding: 15px;
-        }
-
-        .task-list {
-            list-style: none;
-        }
-
-        .task-item {
-            display: flex;
-            align-items: center;
-            padding: 6px;
-            margin: 3px 0;
-            background-color: #3a3a3a;
-            border-radius: 4px;
-            cursor: move;
-            gap: 6px;
-            font-size: 0.9rem;
-            flex-wrap: wrap;  /* Allow wrapping */
-            overflow: hidden;  /* Hide any overflow */
-        }
-
-        .task-name {
-            flex: 0 0 80px;  /* Reduced width to prevent overflow */
-            min-width: 80px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .checkboxes {
-            display: flex;
-            gap: 8px;
-            flex: 1;
-            justify-content: flex-start;
-            flex-wrap: wrap;  /* Allow checkboxes to wrap */
-            min-width: 0;  /* Allow container to shrink */
-        }
-
-        .checkbox {
-            appearance: none;
-            width: 18px;
-            height: 18px;
-            border: 2px solid #666;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            flex: 0 0 18px;  /* Changed: fixed size with no grow/shrink */
-        }
-
-        .checkbox:checked {
-            position: relative;
-        }
-
-        .checkbox:checked::after {
-            content: '✓';
-            position: absolute;
-            color: white;
-            font-size: 12px;
-            left: 3px;
-            top: 0px;
-        }
-
-        .drag-handle {
-            padding: 0 5px;
-            cursor: move;
-            color: #666;
-            margin-left: auto;  /* Push handle to the right */
-        }
-
-        .dragging {
-            opacity: 0.5;
-        }
-
-        /* Add new title styles */
-        .title-container {
-            text-align: center;
-            margin-bottom: 20px;
-            font-family: 'Roboto', sans-serif;
-        }
-
-        .main-title {
-            font-size: 1rem;
-            color: rgba(255, 255, 255, 0.7);
-            margin-bottom: 4px;
-        }
-
-        .subtitle {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: #ffffff;
-            letter-spacing: 2px;
-        }
-
-        /* Add new styles for the add habit button and input */
-        .add-habit {
-            display: flex;
-            align-items: center;
-            padding: 6px;
-            margin: 3px 0;
-            background-color: #1a1a1a;
-            border-radius: 4px;
-            cursor: pointer;
-            gap: 6px;
-            font-size: 0.9rem;
-        }
-
-        .add-habit-input {
-            display: none;
-            width: 100px;
-            min-width: 100px;
-            background-color: #1a1a1a;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
-            color: white;
-            font-size: 0.9rem;
-        }
-
-        .add-habit-input.active {
-            display: block;
-        }
-
-        .add-habit .plus-icon {
-            font-size: 1.2rem;
-            color: #666;
-            width: 100%;
-            text-align: center;
-        }
-
-        /* Update mobile styles */
-        @media screen and (max-width: 768px) {
-            .task-item {
-                gap: 8px;
-            }
-
-            .task-name {
-                flex: 0 0 80px;  /* Keep consistent with desktop */
-            }
-
-            .checkboxes {
-                flex: 1;
-                justify-content: flex-start;
-                gap: 8px;
-                min-width: 0;  /* Allow container to shrink */
-            }
-
-            .drag-handle {
-                margin-left: auto;  /* Push handle to the right */
-            }
-        }
-
-        .expand-button {
-            position: absolute;
-            bottom: 15px;
-            right: 15px;
-            background-color: #3a3a3a;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 8px 12px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-
-        .expand-button:hover {
-            background-color: #4a4a4a;
-        }
-
-        .day-title {
-            font-size: 14px;
-            color: rgba(255, 255, 255, 0.7);
-            margin-bottom: 10px;
-            text-align: center;
-        }
-
-        /* Update the media query for mobile */
-        @media screen and (max-width: 768px) {
-            .scheduler-container {
-                flex-direction: column;
-            }
-            
-            .scheduler {
-                flex: 1;
-                width: 100%;
-            }
-        }
+/* Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+body {
+    background-color: #1a1a1a;
+    color: white;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.main-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Title Styles */
+.title-container {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.main-title {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 4px;
+}
+
+.subtitle {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 2px;
+}
+
+/* Scheduler Container */
+.scheduler-container {
+    display: flex;
+    gap: 15px;
+    overflow-x: auto;
+    margin-bottom: 15px;
+    transition: all 0.3s ease;
+}
+
+.scheduler-container.expanded {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+}
+
+.scheduler-container.expanded .scheduler {
+    padding: 5px;
+}
+
+.scheduler-container.expanded .time-block {
+    padding: 2px;
+    margin-bottom: 2px;
+}
+
+.scheduler-container.expanded .time-input {
+    font-size: 0.7rem;
+    padding: 2px;
+}
+
+.scheduler-container.expanded .checkmark {
+    font-size: 0.7rem;
+    right: 2px;
+}
+
+.scheduler-container.expanded .day-title {
+    font-size: 0.8rem;
+    margin-bottom: 5px;
+}
+
+/* Scheduler Base */
+.scheduler {
+    background-color: #2a2a2a;
+    border-radius: 12px;
+    padding: 15px;
+    flex: 0 0 27%;
+    position: relative;
+}
+
+.day-title {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+/* Time Blocks */
+.time-block {
+    display: flex;
+    align-items: center;
+    position: relative;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    border: 1px solid #2a2a2a;
+    margin-bottom: 4px;
+}
+
+.time-block.split {
+    gap: 4px;
+    background: transparent !important;
+}
+
+.split-section {
+    position: relative;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+}
+
+.split-section:first-child { width: 45%; }
+.split-section:last-child { width: 55%; }
+
+.time-input {
+    padding: 8px;
+    border: none;
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.9rem;
+    background: transparent;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    width: 100%;
+}
+
+.checkmark {
+    position: absolute;
+    right: 12px;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 5px;
+    z-index: 2;
+}
+
+/* Time Block Colors */
+.morning-early { background-color: #4a2639; }
+.day-mid { background-color: #2c4a3e; }
+.evening { background-color: #2c3e4a; }
+.night { background-color: #2b1f36; }
+
+.morning-early.active, .split-section.morning-early.active { background-color: #8a3960; }
+.day-mid.active, .split-section.day-mid.active { background-color: #3d8066; }
+.evening.active, .split-section.evening.active { background-color: #41718a; }
+.night.active, .split-section.night.active { background-color: #563c76; }
+
+.x-task { background-color: #1a1a1a !important; }
+
+/* Expand Button */
+.expand-button {
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
+    background-color: #3a3a3a;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.expand-button:hover {
+    background-color: #4a4a4a;
+}
+
+/* Content Layout */
+.content-row {
+    display: grid;
+    grid-template-columns: 27% 30% 40%;
+    gap: 15px;
+}
+
+/* Board Styles */
+.board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    height: 100%;
+    background-color: #2a2a2a;
+    border-radius: 12px;
+    padding: 5px;
+}
+
+.column {
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    padding: 0.2rem;
+    min-width: 0;
+}
+
+.column h2 {
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+}
+
+/* Task Styles */
+.board .task {
+    padding: 0.5rem;
+    margin-bottom: 0.3rem;
+    border-radius: 4px;
+    cursor: move;
+    transition: background-color 0.5s ease;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.one-thing .task { background-color: #6b2b5a; }
+.today .task { background-color: #2b5a3f; }
+.do-later .task { background-color: #8b5735; }
+
+/* Task List Styles */
+.task-list-container {
+    background-color: #2a2a2a;
+    border-radius: 12px;
+    padding: 15px;
+}
+
+.task-list {
+    list-style: none;
+}
+
+.task-item {
+    display: flex;
+    align-items: center;
+    padding: 6px;
+    margin: 3px 0;
+    background-color: #3a3a3a;
+    border-radius: 4px;
+    cursor: move;
+    gap: 6px;
+    font-size: 0.9rem;
+    flex-wrap: wrap;
+    overflow: hidden;
+}
+
+/* Add Task/Habit Styles */
+.add-task, .add-habit {
+    display: flex;
+    align-items: center;
+    padding: 6px;
+    margin-top: 0.3rem;
+    background-color: #1a1a1a;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.add-task-input, .add-habit-input {
+    display: none;
+    width: 100%;
+    background-color: transparent;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: white;
+    font-size: 0.9rem;
+}
+
+.add-task-input.active, .add-habit-input.active {
+    display: block;
+}
+
+.plus-icon {
+    font-size: 1.2rem;
+    color: #666;
+    text-align: center;
+    width: 100%;
+}
+
+/* Mobile Responsive */
+@media screen and (max-width: 768px) {
+    .content-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .scheduler-container {
+        flex-direction: column;
+    }
+    
+    .scheduler {
+        flex: 1;
+        width: 100%;
+    }
+    
+    .subtitle {
+        font-size: 2rem;
+    }
+    
+    .board {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .column {
+        margin-bottom: 15px;
+    }
+    
+    .task-item {
+        flex-wrap: wrap;
+    }
+    
+    .task-name {
+        width: 100%;
+        margin-bottom: 5px;
+    }
+    
+    .checkboxes {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
     </style>
 </head>
 <body>
