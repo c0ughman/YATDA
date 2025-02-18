@@ -1648,7 +1648,7 @@ function setupFirebaseListeners() {
 
 function updateScheduler(data, target = document.getElementById('timeBlocks')) {
     if (!data) return;
-    const timeBlocks = target.querySelectorAll('.time-input');
+    const timeBlocks = target.querySelectorAll('.time-block');
     
     timeBlocks.forEach(block => {
         const input = block.querySelector('.time-input');
@@ -1743,31 +1743,19 @@ function syncSchedulerChanges() {
     const timeBlocks = document.querySelectorAll('.time-block');
     timeBlocks.forEach(block => {
         const input = block.querySelector('.time-input');
-        if (input) {  // Add null check
-            input.addEventListener('change', () => {
-                try {
-                    const hour = input.placeholder.match(/\d+/)[0];
-                    const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
-                    
-                    // Get the scheduler container and day title to determine which document to update
-                    const scheduler = block.closest('.scheduler');
-                    const dayTitle = scheduler.querySelector('.day-title');
-                    const docName = dayTitle ? 
-                        dayTitle.textContent.toLowerCase() === 'today' ? 
-                            'chunksheet' : 
-                            dayTitle.textContent.toLowerCase() : 
-                        'chunksheet';
-
-                    db.collection('chunksheet').doc(docName).update({
-                        [key]: input.value
-                    }).catch(error => {
-                        console.error('Error updating scheduler:', error);
-                    });
-                } catch (error) {
-                    console.error('Error in scheduler sync:', error);
-                }
-            });
-        }
+        input.addEventListener('change', () => {
+            try {
+                const hour = input.placeholder.match(/\d+/)[0];
+                const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
+                db.collection('chunksheet').doc('chunksheet').update({
+                    [key]: input.value
+                }).catch(error => {
+                    console.error('Error updating scheduler:', error);
+                });
+            } catch (error) {
+                console.error('Error in scheduler sync:', error);
+            }
+        });
     });
 }
 
@@ -1974,19 +1962,6 @@ function createDayScheduler(dayName, docName) {
         input.className = 'time-input';
         input.placeholder = formatTime(hour);
         
-        // Add change event listener for Firebase sync
-        input.addEventListener('change', () => {
-            const hour = input.placeholder.match(/\d+/)[0];
-            const key = `h${hour}${input.placeholder.includes('PM') ? 'pm' : 'am'}`;
-            
-            // Update Firebase with the new value
-            db.collection('chunksheet').doc(docName).set({
-                [key]: input.value
-            }, { merge: true }).catch(error => {
-                console.error('Error updating scheduler:', error);
-            });
-        });
-        
         const checkmark = document.createElement('span');
         checkmark.className = 'checkmark';
         checkmark.textContent = '✓';
@@ -2043,9 +2018,6 @@ function expandSchedulers() {
     
 </body>
 </html>
-
- 
-
 
 
 
