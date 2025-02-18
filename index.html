@@ -32,6 +32,52 @@ body {
     margin: 0 auto;
 }
 
+/* Updated Content Layout */
+.content-wrapper {
+    display: grid;
+    grid-template-columns: 30% 30% 37%;
+    gap: 15px;
+    transition: all 0.3s ease;
+}
+
+/* Scheduler Container Updates */
+.scheduler-container {
+    display: flex;
+    gap: 15px;
+    transition: all 0.3s ease;
+}
+
+/* Expanded State */
+.scheduler-container.expanded {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+    grid-row: 2;
+    grid-column: 1 / -1;
+}
+
+.scheduler-container.expanded + .content-wrapper {
+    grid-row: 3;
+    grid-column: 1 / -1;
+}
+
+/* Media Queries */
+@media screen and (max-width: 1200px) {
+    .content-wrapper {
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    .content-wrapper {
+        grid-template-columns: 1fr;
+    }
+    
+    .scheduler-container.expanded {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Title Styles */
 .title-container {
     text-align: center;
@@ -49,15 +95,6 @@ body {
     font-weight: 700;
     color: #ffffff;
     letter-spacing: 2px;
-}
-
-/* Scheduler Container */
-.scheduler-container {
-    display: flex;
-    gap: 15px;
-    overflow-x: auto;
-    margin-bottom: 15px;
-    transition: all 0.3s ease;
 }
 
 .scheduler-container.expanded {
@@ -357,26 +394,24 @@ body {
 
     </style>
 </head>
+<!-- All styling and script imports remain in the head -->
 <body>
-    <!-- Add new title section -->
+    <!-- Title section -->
     <div class="title-container">
         <h1 class="main-title">YATDA 2.0</h1>
         <div class="subtitle">C0UGHMAN's Sheet</div>
     </div>
     
     <div class="main-container">
-        <!-- Scheduler Container -->
-        <div class="scheduler-container">
-            <div class="scheduler">
-                <div class="day-title">Today</div>
-                <div id="timeBlocks"></div>
+        <div class="content-wrapper">
+            <!-- Scheduler Container -->
+            <div class="scheduler-container">
+                <div class="scheduler">
+                    <div class="day-title">Today</div>
+                    <div id="timeBlocks"></div>
+                </div>
             </div>
-        </div>
 
-        <button class="expand-button">+</button>
-
-        <!-- Content Row -->
-        <div class="content-row">
             <!-- Task List Column -->
             <div class="task-list-container">
                 <ul class="task-list">
@@ -421,10 +456,9 @@ body {
                 </div>
             </div>
         </div>
+
+        <button class="expand-button">+</button>
     </div>
-
-    
-
   <script>
 // Initialize Firebase with your config
 const firebaseConfig = {
