@@ -1855,8 +1855,24 @@ function expandSchedulers() {
     const container = document.querySelector('.scheduler-container');
     const expandButton = document.querySelector('.expand-button');
     
+    // Check if already expanded
+    if (container.classList.contains('expanded')) {
+        // Remove expanded class
+        container.classList.remove('expanded');
+        // Remove all schedulers except the first one
+        const schedulers = container.querySelectorAll('.scheduler');
+        for (let i = 1; i < schedulers.length; i++) {
+            schedulers[i].remove();
+        }
+        // Update button text
+        expandButton.textContent = '+';
+        return;
+    }
+    
     // Add expanded class to container
     container.classList.add('expanded');
+    // Update button text
+    expandButton.textContent = '-';
     
     const days = [
         { name: 'Tuesday', doc: 'tuesday' },
@@ -1874,7 +1890,6 @@ function expandSchedulers() {
     
     // Re-initialize sync functionality for all schedulers
     syncSchedulerChanges();
-    
 }
 
 </script>
